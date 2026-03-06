@@ -12,7 +12,7 @@
                 <li><a href="<%= ~p"/blog" %>">Blog</a></li>
                 <li><a href="<%= ~p"/sponsors" %>">Sponsors</a></li>
                 <li><a href="https://github.com/hexpm">GitHub</a></li>
-                <li><a href="https://twitter.com/hexpm">Twitter</a></li>
+                <li><a href="https://x.com/hexpm">X.com</a></li>
                 <li><a href="https://status.hex.pm">Status</a></li>
               </ul>
             </div>
