@@ -45,7 +45,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
 
       assert UserHandles.render(user) ==
                [
-                 {"Twitter", "eric", "https://x.com/eric"},
+                 {"X.com", "eric", "https://x.com/eric"},
                  {"Bluesky", "eric.bsky.social", "https://bsky.app/profile/eric.bsky.social"},
                  {"GitHub", "eric", "https://github.com/eric"},
                  {"Elixir Forum", "eric", "https://elixirforum.com/u/eric"},
@@ -70,7 +70,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
 
       assert UserHandles.render(user) ==
                [
-                 {"Twitter", "eric", "https://x.com/eric"},
+                 {"X.com", "eric", "https://x.com/eric"},
                  {"Bluesky", "eric.bsky.social", "https://bsky.app/profile/eric.bsky.social"},
                  {"GitHub", "eric", "https://github.com/eric"},
                  {"Elixir Forum", "eric", "https://elixirforum.com/u/eric"},
