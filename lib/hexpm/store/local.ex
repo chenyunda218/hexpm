@@ -33,6 +33,12 @@ defmodule Hexpm.Store.Local do
     File.write!(path, blob)
   end
 
+  def put_file(bucket, key, source_path, _opts) do
+    path = safe_path!(bucket, key)
+    File.mkdir_p!(Path.dirname(path))
+    File.cp!(source_path, path)
+  end
+
   def delete(bucket, key) do
     bucket
     |> safe_path!(key)

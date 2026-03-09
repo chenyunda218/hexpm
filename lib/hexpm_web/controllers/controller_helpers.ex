@@ -471,8 +471,8 @@ defmodule HexpmWeb.ControllerHelpers do
                 :ok ->
                   # Authorization already passed, send 100 Continue and read body
                   conn = inform(conn, :continue, [])
-                  {conn, body} = HexpmWeb.Plugs.read_body(conn)
-                  put_in(conn.params["body"], body)
+                  {conn, path} = HexpmWeb.Plugs.read_body_to_file(conn)
+                  put_in(conn.params["body"], path)
 
                 {:error, :too_large} ->
                   validation_failed(conn, %{tar: "too big"})

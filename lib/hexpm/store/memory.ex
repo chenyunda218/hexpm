@@ -45,6 +45,11 @@ defmodule Hexpm.Store.Memory do
     :ets.insert(@table, {{owner, bucket, key}, body})
   end
 
+  def put_file(bucket, key, path, opts) do
+    body = File.read!(path)
+    put(bucket, key, body, opts)
+  end
+
   def delete(bucket, key) do
     owner = owner_pid()
     :ets.delete(@table, {owner, bucket, key})
