@@ -9,7 +9,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
         build(:user,
           handles:
             build(:user_handles,
-              twitter: "https://twitter.com/eric",
+              twitter: "https://x.com/eric",
               bluesky: "https://bsky.app/profile/eric.bsky.social",
               github: "https://github.com/eric",
               elixirforum: "https://elixirforum.com/u/eric",
@@ -20,7 +20,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
 
       assert UserHandles.render(user) ==
                [
-                 {"Twitter", "eric", "https://twitter.com/eric"},
+                 {"X.com", "eric", "https://x.com/eric"},
                  {"Bluesky", "eric.bsky.social", "https://bsky.app/profile/eric.bsky.social"},
                  {"GitHub", "eric", "https://github.com/eric"},
                  {"Elixir Forum", "eric", "https://elixirforum.com/u/eric"},
@@ -34,7 +34,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
         build(:user,
           handles:
             build(:user_handles,
-              twitter: "http://twitter.com/eric",
+              twitter: "http://x.com/eric",
               bluesky: "http://bsky.app/profile/eric.bsky.social",
               github: "http://github.com/eric",
               elixirforum: "http://elixirforum.com/u/eric",
@@ -45,7 +45,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
 
       assert UserHandles.render(user) ==
                [
-                 {"Twitter", "eric", "https://twitter.com/eric"},
+                 {"X.com", "eric", "https://x.com/eric"},
                  {"Bluesky", "eric.bsky.social", "https://bsky.app/profile/eric.bsky.social"},
                  {"GitHub", "eric", "https://github.com/eric"},
                  {"Elixir Forum", "eric", "https://elixirforum.com/u/eric"},
@@ -59,7 +59,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
         build(:user,
           handles:
             build(:user_handles,
-              twitter: "twitter.com/eric",
+              twitter: "x.com/eric",
               bluesky: "bsky.app/profile/eric.bsky.social",
               github: "github.com/eric",
               elixirforum: "elixirforum.com/u/eric",
@@ -70,7 +70,7 @@ defmodule Hexpm.Accounts.UserHandlesTest do
 
       assert UserHandles.render(user) ==
                [
-                 {"Twitter", "eric", "https://twitter.com/eric"},
+                 {"X.com", "eric", "https://x.com/eric"},
                  {"Bluesky", "eric.bsky.social", "https://bsky.app/profile/eric.bsky.social"},
                  {"GitHub", "eric", "https://github.com/eric"},
                  {"Elixir Forum", "eric", "https://elixirforum.com/u/eric"},

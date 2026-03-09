@@ -48,10 +48,10 @@
 
             <%= inputs_for f, :handles, fn f -> %>
               <div class="form-group">
-                <%= label f, :twitter %>
+                <%= label f, :twitter, "X.com" %>
                 <div class="input-group">
-                  <div class="input-group-addon">twitter.com/</div>
-                  <%= ViewHelpers.text_input f, :twitter, placeholder: "organization_twitter_id" %>
+                  <div class="input-group-addon">x.com/</div>
+                  <%= ViewHelpers.text_input f, :twitter, placeholder: "organization_x_id" %>
                 </div>
 
                 <%= ViewHelpers.error_tag f, :twitter %>
