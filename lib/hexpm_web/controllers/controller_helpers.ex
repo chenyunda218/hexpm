@@ -398,8 +398,15 @@ defmodule HexpmWeb.ControllerHelpers do
     if logged_in?(conn) do
       conn
     else
-      redirect(conn, to: ~p"/login?return=#{conn.request_path}")
-      |> halt
+      return_path =
+        case conn.query_string do
+          "" -> conn.request_path
+          qs -> conn.request_path <> "?" <> qs
+        end
+
+      conn
+      |> redirect(to: ~p"/login?return=#{return_path}")
+      |> halt()
     end
   end
 
@@ -464,8 +471,8 @@ defmodule HexpmWeb.ControllerHelpers do
                 :ok ->
                   # Authorization already passed, send 100 Continue and read body
                   conn = inform(conn, :continue, [])
-                  {conn, body} = HexpmWeb.Plugs.read_body(conn)
-                  put_in(conn.params["body"], body)
+                  {conn, path} = HexpmWeb.Plugs.read_body_to_file(conn)
+                  put_in(conn.params["body"], path)
 
                 {:error, :too_large} ->
                   validation_failed(conn, %{tar: "too big"})
