@@ -67,7 +67,7 @@ jobs:
         run: MIX_ENV=test mix compile
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 22
 
@@ -84,7 +84,7 @@ jobs:
           workload_identity_provider: ${{ secrets.GCLOUD_WORKFLOW_IDENTITY_POOL_PROVIDER }}
 
       - name: Docker Auth
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4.0.0
         with:
           registry: gcr.io
           username: "oauth2accesstoken"
@@ -173,12 +173,15 @@ jobs:
           docker logs hexpm_billing
           exit 1
 
+      - name: Stream hexpm_billing logs
+        run: docker logs -f --timestamps hexpm_billing > /tmp/hexpm_billing.log 2>&1 &
+
       - name: Run integration tests
         run: mix test --only integration
 
       - name: Upload screenshots on failure
         if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: integration-test-screenshots
           path: screenshots/
@@ -186,4 +189,12 @@ jobs:
 
       - name: Show hexpm_billing logs on failure
         if: failure()
-        run: docker logs hexpm_billing
+        run: docker logs --timestamps hexpm_billing
+
+      - name: Upload hexpm_billing logs on failure
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: hexpm-billing-logs
+          path: /tmp/hexpm_billing.log
+          if-no-files-found: ignore
