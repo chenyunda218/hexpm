@@ -2,7 +2,7 @@
   title="Two-factor authentication"
   subtitle="Enter the 6-digit code from your authenticator app"
 >
-  <%= form_tag(~p"/tfa", id: "tfa-form", class: "space-y-6") do %>
+  <.form for={%{}} action={~p"/tfa"} id="tfa-form" class="space-y-6">
     <.text_input
       id="code"
       name="code"
@@ -18,7 +18,7 @@
     <.button type="submit" full_width>
       Verify
     </.button>
-  <% end %>
+  </.form>
 
   <:footer_links>
     <p class="text-small text-center mt-8">

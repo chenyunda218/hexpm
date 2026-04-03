@@ -17,7 +17,7 @@
           </h2>
 
           <%!-- Profile Form --%>
-          <%= form_for @changeset, ~p"/dashboard/profile", [method: :post], fn f -> %>
+          <.form :let={f} for={@changeset} action={~p"/dashboard/profile"} method="post">
             <%!-- Profile Picture Section --%>
             <div class="flex items-start gap-6 mb-8 pb-8 border-b border-grey-200">
               <%= if User.email(@current_user, :gravatar) do %>
@@ -171,7 +171,7 @@
                 </.button>
               </div>
             </div>
-          <% end %>
+          </.form>
         </div>
       </div>
     </div>

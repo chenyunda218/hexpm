@@ -62,6 +62,7 @@ defmodule HexpmWeb.Templates.Dashboard.Security.Components.TFACard do
     <%!-- Disable TFA Confirmation Modal --%>
     <.confirmation_modal
       id="disable-tfa-modal"
+      current_user={@user}
       title="Disable Two-Factor Authentication?"
       message="Disabling two-factor authentication will make your account less secure. You will no longer need codes from your authenticator app to sign in, and your recovery codes will be deleted."
       confirm_text="Disable Two-Factor"

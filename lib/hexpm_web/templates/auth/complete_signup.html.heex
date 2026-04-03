@@ -7,7 +7,7 @@
     @changeset ||
       Ecto.Changeset.cast(%Hexpm.Accounts.User{}, %{username: @suggested_username}, [:username]) %>
 
-  <%= form_for changeset, ~p"/auth/complete-signup", [as: :user, class: "space-y-6"], fn f -> %>
+  <.form :let={f} for={changeset} action={~p"/auth/complete-signup"} as="user" class="space-y-6">
     <.text_input field={f[:username]} label="Username" />
     <p class="text-grey-500 text-sm -mt-4">
       Username must be at least 3 characters and can only contain letters, numbers, underscores, hyphens, and periods.
@@ -21,5 +21,5 @@
         Cancel
       </.text_link>
     </div>
-  <% end %>
+  </.form>
 </.auth_layout>

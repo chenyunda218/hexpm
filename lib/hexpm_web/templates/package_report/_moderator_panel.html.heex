@@ -8,7 +8,7 @@
   <% else %>
     <div class="flex flex-wrap gap-2">
       <%= if @report.state in ["to_accept", "rejected"] do %>
-        <%= form_tag ~p"/reports/#{@report.id}/accept" do %>
+        <.form for={%{}} action={~p"/reports/#{@report.id}/accept"}>
           <button
             type="submit"
             name="operation"
@@ -17,11 +17,11 @@
           >
             Accept
           </button>
-        <% end %>
+        </.form>
       <% end %>
 
       <%= if @report.state in ["to_accept", "accepted"] do %>
-        <%= form_tag ~p"/reports/#{@report.id}/reject" do %>
+        <.form for={%{}} action={~p"/reports/#{@report.id}/reject"}>
           <button
             type="submit"
             name="operation"
@@ -30,11 +30,11 @@
           >
             Reject
           </button>
-        <% end %>
+        </.form>
       <% end %>
 
       <%= if @report.state == "accepted" do %>
-        <%= form_tag ~p"/reports/#{@report.id}/solve" do %>
+        <.form for={%{}} action={~p"/reports/#{@report.id}/solve"}>
           <button
             type="submit"
             name="operation"
@@ -43,9 +43,9 @@
           >
             Mark as solved
           </button>
-        <% end %>
+        </.form>
 
-        <%= form_tag ~p"/reports/#{@report.id}/unresolve" do %>
+        <.form for={%{}} action={~p"/reports/#{@report.id}/unresolve"}>
           <button
             type="submit"
             name="operation"
@@ -54,7 +54,7 @@
           >
             Set unresolved
           </button>
-        <% end %>
+        </.form>
       <% end %>
     </div>
   <% end %>

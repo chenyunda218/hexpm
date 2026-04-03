@@ -38,19 +38,19 @@ defmodule HexpmWeb.Components.Form do
   @doc """
   Renders a form that includes a signed sudo token.
 
-  Wraps Phoenix's `<.form>` component, which handles CSRF tokens and method
-  overrides, and adds a sudo form token bound to the form's method and action.
+  Wraps `form_for`, which handles CSRF tokens and method overrides, and adds
+  a sudo form token bound to the form's method and action.
   Use this for all forms on sudo-protected pages so submissions work even if
   the sudo session expires between page load and submit.
 
   ## Examples
 
-      <.sudo_form conn={@conn} action={~p"/dashboard/security/change-password"}>
+      <.sudo_form current_user={@current_user} action={~p"/dashboard/security/change-password"}>
         <input type="password" name="user[password]" />
         <.button type="submit">Change Password</.button>
       </.sudo_form>
 
-      <.sudo_form conn={@conn} action={~p"/dashboard/keys"} method="delete">
+      <.sudo_form current_user={@current_user} action={~p"/dashboard/keys"} method="delete">
         <input type="hidden" name="key_name" value="my-key" />
         <.button type="submit">Delete</.button>
       </.sudo_form>

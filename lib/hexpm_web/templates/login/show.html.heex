@@ -6,7 +6,7 @@
   oauth_href={~p"/auth/github"}
 >
   <%!-- Form --%>
-  <%= form_tag(~p"/login", id: "login-form", class: "space-y-6") do %>
+  <.form for={%{}} action={~p"/login"} id="login-form" class="space-y-6">
     <%!-- Username/Email Field --%>
     <.text_input id="username" name="username" label="Username or Email" />
 
@@ -26,7 +26,7 @@
     <.button type="submit" full_width class="mt-8">
       Log In
     </.button>
-  <% end %>
+  </.form>
 
   <%!-- Footer Links --%>
   <:footer_links>

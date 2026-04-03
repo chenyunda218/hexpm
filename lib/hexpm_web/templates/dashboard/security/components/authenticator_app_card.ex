@@ -15,6 +15,8 @@ defmodule HexpmWeb.Templates.Dashboard.Security.Components.AuthenticatorAppCard 
     router: HexpmWeb.Router,
     statics: HexpmWeb.static_paths()
 
+  attr :user, :map, required: true
+
   def authenticator_app_card(assigns) do
     ~H"""
     <div class="bg-white border border-grey-200 rounded-lg p-8">
@@ -35,6 +37,7 @@ defmodule HexpmWeb.Templates.Dashboard.Security.Components.AuthenticatorAppCard 
     <%!-- Reset Auth App Confirmation Modal --%>
     <.confirmation_modal
       id="reset-auth-app-modal"
+      current_user={@user}
       title="Reset Authenticator App?"
       message="This will disable two-factor authentication until you scan the new QR code and verify it. All your current recovery codes will stop working and new ones will be generated."
       confirm_text="Reset App"

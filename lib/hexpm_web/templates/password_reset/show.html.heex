@@ -3,7 +3,7 @@
   subtitle="Enter your username or email address and we'll send you a link to reset your password"
   show_oauth={false}
 >
-  <%= form_tag(~p"/password/reset", id: "password-reset-form", method: :post) do %>
+  <.form for={%{}} action={~p"/password/reset"} id="password-reset-form" method="post">
     <.text_input
       id="username"
       name="username"
@@ -27,7 +27,7 @@
     <.button type="submit" variant="primary" full_width class="mt-4">
       Send Reset Link
     </.button>
-  <% end %>
+  </.form>
 
   <:footer_links>
     <div class="flex flex-col items-center gap-3 text-small mt-6">

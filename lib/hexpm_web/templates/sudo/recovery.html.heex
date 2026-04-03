@@ -3,7 +3,7 @@
   subtitle="Enter one of your recovery codes to verify your identity. This code will be marked as used."
   show_oauth={false}
 >
-  <%= form_tag(~p"/sudo/recovery", id: "sudo-recovery-form", class: "space-y-6") do %>
+  <.form for={%{}} action={~p"/sudo/recovery"} id="sudo-recovery-form" class="space-y-6">
     <.text_input
       id="code"
       name="code"
@@ -16,7 +16,7 @@
     <.button type="submit" full_width>
       Verify
     </.button>
-  <% end %>
+  </.form>
 
   <:footer_links>
     <p class="text-small text-center mt-6">

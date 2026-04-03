@@ -6,6 +6,7 @@ defmodule HexpmWeb.Components.ConfirmationModal do
 
       <.confirmation_modal
         id="delete-user-modal"
+        current_user={@current_user}
         title="Delete User?"
         message="This action cannot be undone. All user data will be permanently deleted."
         confirm_text="Delete User"
@@ -17,9 +18,9 @@ defmodule HexpmWeb.Components.ConfirmationModal do
       <.button phx-click={show_modal("delete-user-modal")}>Delete</.button>
   """
   use Phoenix.Component
-  use PhoenixHTMLHelpers
   import HexpmWeb.Components.Modal, only: [modal: 1, hide_modal: 1]
   import HexpmWeb.Components.Buttons
+  import HexpmWeb.Components.Form, only: [sudo_form: 1]
 
   attr :id, :string, required: true
   attr :title, :string, required: true
@@ -27,6 +28,7 @@ defmodule HexpmWeb.Components.ConfirmationModal do
   attr :confirm_text, :string, default: "Confirm"
   attr :cancel_text, :string, default: "Cancel"
   attr :confirm_action, :string, required: true
+  attr :current_user, :map, required: true
   attr :danger, :boolean, default: true
 
   def confirmation_modal(assigns) do
@@ -49,14 +51,14 @@ defmodule HexpmWeb.Components.ConfirmationModal do
         <.button type="button" variant="outline" phx-click={hide_modal(@id)}>
           {@cancel_text}
         </.button>
-        <%= form_tag(@confirm_action, [method: :post, class: "m-0"]) do %>
+        <.sudo_form current_user={@current_user} action={@confirm_action} class="m-0">
           <.button
             type="submit"
             variant={if @danger, do: "danger", else: "primary"}
           >
             {@confirm_text}
           </.button>
-        <% end %>
+        </.sudo_form>
       </:footer>
     </.modal>
     """

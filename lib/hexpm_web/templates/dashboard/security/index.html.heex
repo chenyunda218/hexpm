@@ -19,7 +19,7 @@
         <.tfa_card user={@current_user} />
 
         <%= if Hexpm.Accounts.User.tfa_enabled?(@current_user) do %>
-          <.authenticator_app_card />
+          <.authenticator_app_card user={@current_user} />
 
           <.recovery_codes_card user={@current_user} />
         <% end %>

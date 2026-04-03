@@ -3,7 +3,13 @@
   subtitle="Enter your username and email address to receive a verification link"
   show_oauth={false}
 >
-  <%= form_tag(~p"/email/verification", id: "email-verification-form", method: :post, class: "space-y-6") do %>
+  <.form
+    for={%{}}
+    action={~p"/email/verification"}
+    id="email-verification-form"
+    method="post"
+    class="space-y-6"
+  >
     <.text_input
       id="username"
       name="username"
@@ -35,7 +41,7 @@
     <.button type="submit" variant="primary" full_width>
       Send verification email
     </.button>
-  <% end %>
+  </.form>
 
   <:footer_links>
     <div class="flex flex-col items-center gap-3 text-small mt-6">

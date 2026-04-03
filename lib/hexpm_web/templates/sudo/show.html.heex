@@ -4,7 +4,7 @@
     subtitle="For your security, please verify your identity to continue"
     show_oauth={false}
   >
-    <%= form_tag(~p"/sudo", id: "sudo-tfa-form", class: "space-y-6") do %>
+    <.form for={%{}} action={~p"/sudo"} id="sudo-tfa-form" class="space-y-6">
       <input type="hidden" name="type" value="tfa" />
       <.text_input
         id="code"
@@ -19,7 +19,7 @@
       <.button type="submit" full_width>
         Verify
       </.button>
-    <% end %>
+    </.form>
 
     <:footer_links>
       <p class="text-small text-center mt-6">
@@ -45,13 +45,13 @@
     </:oauth_button>
 
     <%= if @has_password do %>
-      <%= form_tag(~p"/sudo", id: "sudo-password-form", class: "space-y-6") do %>
+      <.form for={%{}} action={~p"/sudo"} id="sudo-password-form" class="space-y-6">
         <input type="hidden" name="type" value="password" />
         <.password_input id="password" name="password" label="Password" />
         <.button type="submit" full_width>
           Verify
         </.button>
-      <% end %>
+      </.form>
     <% end %>
 
     <%= if !@has_github && !@has_password do %>

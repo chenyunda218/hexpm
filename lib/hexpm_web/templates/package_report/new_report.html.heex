@@ -7,7 +7,7 @@
   </div>
 
   <div class="bg-white border border-grey-200 rounded-xl p-6">
-    <%= form_tag ~p"/reports" do %>
+    <.form for={%{}} action={~p"/reports"}>
       <input type="hidden" name="package" value={@package_name} />
       <input type="hidden" name="repository" value={@repository} />
 
@@ -65,6 +65,6 @@
         </p>
         <.button type="submit">Submit report</.button>
       </div>
-    <% end %>
+    </.form>
   </div>
 </div>

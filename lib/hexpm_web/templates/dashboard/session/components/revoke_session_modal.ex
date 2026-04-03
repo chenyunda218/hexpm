@@ -3,7 +3,6 @@ defmodule HexpmWeb.Dashboard.Session.Components.RevokeSessionModal do
   Modal for revoking a session with confirmation.
   """
   use Phoenix.Component
-  use PhoenixHTMLHelpers
   import HexpmWeb.Components.Buttons
 
   use Phoenix.VerifiedRoutes,
@@ -48,12 +47,12 @@ defmodule HexpmWeb.Dashboard.Session.Components.RevokeSessionModal do
         >
           Cancel
         </.button>
-        <%= form_tag(~p"/dashboard/sessions", [method: :delete, id: "#{@modal_id}-form"]) do %>
+        <.form for={%{}} action={~p"/dashboard/sessions"} method="delete" id={"#{@modal_id}-form"}>
           <input type="hidden" name="_id" value={@session.id} />
           <.button type="submit" variant="danger">
             Revoke Session
           </.button>
-        <% end %>
+        </.form>
       </:footer>
     </HexpmWeb.Components.Modal.modal>
     """
