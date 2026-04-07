@@ -103,9 +103,7 @@ defmodule HexpmWeb.Components.PackageLayout do
               <%= if @current_release do %>
                 <div class="bg-grey-200 flex items-center gap-1.5 px-3 py-1 rounded-xl whitespace-nowrap">
                   {HexpmWeb.ViewIcons.icon(:heroicon, "tag", class: "size-3.5 text-grey-500")}
-                  <p class="text-grey-700 text-sm font-medium">
-                    v {@current_release.version}
-                  </p>
+                  <p class="text-grey-700 text-sm font-medium">v{@current_release.version}</p>
                 </div>
               <% end %>
             </div>
