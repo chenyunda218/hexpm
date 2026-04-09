@@ -12,6 +12,7 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
   import HexpmWeb.Components.Form, only: [sudo_form: 1]
   import HexpmWeb.Components.Modal, only: [modal: 1, show_modal: 1, hide_modal: 1]
 
+  alias Phoenix.LiveView.JS
   alias HexpmWeb.Dashboard.Organization.Components.BillingHelpers
 
   attr :current_user, :map, required: true
@@ -25,6 +26,7 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
   attr :tax_rate, :any, default: nil
   attr :amount_with_tax, :integer, default: nil
   attr :checkout_html, :string, default: nil
+  attr :pending_action_html, :string, default: nil
   attr :post_action, :string, default: nil
   attr :csrf_token, :string, default: nil
   attr :proration_amount, :integer, default: 0
@@ -50,6 +52,12 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
           </span>
         <% end %>
       </div>
+
+      <%= if @pending_action_html do %>
+        <div class="px-6 py-4">
+          {raw(@pending_action_html)}
+        </div>
+      <% end %>
 
       <div class="px-6 py-5">
         <%= if @subscription do %>
@@ -151,18 +159,25 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
           <script nonce={@script_src_nonce}>
             window.hexpm_billing_api_url = '/dashboard/billing-api';
             window.hexpm_billing_csrf_token = '<%= Plug.CSRFProtection.get_csrf_token() %>';
+            window.hexpm_billing_defer_mount = true;
             window.hexpm_billing_success = function() { window.location.reload(); };
           </script>
-          <div
-            class="mt-6"
-            id="billing-checkout-data"
-            data-post-action={@post_action}
-            data-csrf-token={@csrf_token}
-          >
-            {raw(@checkout_html || "")}
-          </div>
+
+          <.payment_method_modal
+            checkout_html={@checkout_html}
+            post_action={@post_action}
+            csrf_token={@csrf_token}
+          />
 
           <div class="mt-4 flex gap-3 items-center">
+            <.button
+              type="button"
+              variant="outline"
+              size="sm"
+              phx-click={show_modal("payment-method-modal") |> JS.dispatch("payment-modal:opened")}
+            >
+              Update payment method
+            </.button>
             <%= if @subscription["cancel_at_period_end"] && @card && @card["brand"] do %>
               <.sudo_form
                 current_user={@current_user}
@@ -218,6 +233,31 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
           <%= if @stripe_publishable_key do %>
             <script nonce={@script_src_nonce}>
               (function() {
+                function showFlashError(message) {
+                  var container = document.getElementById('flash-container');
+                  if (container) {
+                    var div = document.createElement('div');
+                    div.className = 'flash-message flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg pointer-events-auto max-w-md w-full animate-[flash-autodismiss_10s_ease-in-out_forwards] bg-red-100 border-red-300';
+                    div.setAttribute('role', 'alert');
+
+                    var msg = document.createElement('div');
+                    msg.className = 'flex-1 text-small leading-5 text-red-800';
+                    msg.textContent = message;
+
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'shrink-0 -mr-1 mt-[2px] p-1 rounded transition-colors hover:bg-red-200';
+                    btn.setAttribute('aria-label', 'Dismiss');
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>';
+                    btn.addEventListener('click', function() { div.remove(); });
+
+                    div.appendChild(msg);
+                    div.appendChild(btn);
+                    container.innerHTML = '';
+                    container.appendChild(div);
+                  }
+                }
+
                 var addSeatsForm = document.getElementById('add-seats-form');
                 if (addSeatsForm) {
                   addSeatsForm.addEventListener('submit', async function(event) {
@@ -263,42 +303,53 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
                       submitButton.textContent = 'Payment confirmed! Adding seats...';
                       addSeatsForm.submit();
                     } catch (error) {
-                      submitButton.textContent = error.message || 'Payment failed. Try again.';
+                      var modal = document.getElementById('add-seats-modal');
+                      if (modal) {
+                        modal.classList.add('hidden');
+                        document.getElementById('add-seats-modal-backdrop').classList.add('hidden');
+                        document.getElementById('add-seats-modal-content').classList.add('hidden');
+                        document.body.classList.remove('overflow-hidden');
+                      }
+                      showFlashError(error.message || 'Payment failed. Try again.');
+                      document.getElementById('add-seats-nonce').value = crypto.randomUUID();
+                      submitButton.textContent = 'Add seats';
                       submitButton.disabled = false;
-                      setTimeout(function() { submitButton.textContent = 'Add seats'; }, 3000);
                     }
                   });
                 }
 
-                var scaButtons = document.querySelectorAll('.sca-pay-button');
-                if (scaButtons.length > 0) {
-                  var stripe = Stripe('<%= @stripe_publishable_key %>');
+                // Bind after full page load since invoice buttons are rendered after this script
+                document.addEventListener('DOMContentLoaded', function() {
+                  var scaButtons = document.querySelectorAll('.sca-pay-button');
+                  if (scaButtons.length > 0) {
+                    var stripe = Stripe('<%= @stripe_publishable_key %>');
 
-                  scaButtons.forEach(function(button) {
-                    button.addEventListener('click', async function() {
-                      var clientSecret = button.getAttribute('data-client-secret');
-                      var paymentMethod = button.getAttribute('data-payment-method');
-                      button.disabled = true;
-                      button.textContent = 'Authenticating...';
+                    scaButtons.forEach(function(button) {
+                      button.addEventListener('click', async function() {
+                        var clientSecret = button.getAttribute('data-client-secret');
+                        var paymentMethod = button.getAttribute('data-payment-method');
+                        button.disabled = true;
+                        button.textContent = 'Authenticating...';
 
-                      try {
-                        var confirmParams = {};
-                        if (paymentMethod) {
-                          confirmParams.payment_method = paymentMethod;
+                        try {
+                          var confirmParams = {};
+                          if (paymentMethod) {
+                            confirmParams.payment_method = paymentMethod;
+                          }
+                          var result = await stripe.confirmCardPayment(clientSecret, confirmParams);
+                          if (result.error) throw result.error;
+
+                          button.textContent = 'Payment confirmed!';
+                          setTimeout(function() { window.location.reload(); }, 2000);
+                        } catch (error) {
+                          showFlashError(error.message || 'Authentication failed. Try again.');
+                          button.disabled = false;
+                          button.textContent = 'Authenticate payment';
                         }
-                        var result = await stripe.confirmCardPayment(clientSecret, confirmParams);
-                        if (result.error) throw result.error;
-
-                        button.textContent = 'Payment confirmed!';
-                        setTimeout(function() { window.location.reload(); }, 2000);
-                      } catch (error) {
-                        button.textContent = error.message || 'Authentication failed. Try again.';
-                        button.disabled = false;
-                        setTimeout(function() { button.textContent = 'Authenticate payment'; }, 3000);
-                      }
+                      });
                     });
-                  });
-                }
+                  }
+                });
               })();
             </script>
           <% end %>
@@ -318,16 +369,23 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
           <script nonce={@script_src_nonce}>
             window.hexpm_billing_api_url = '/dashboard/billing-api';
             window.hexpm_billing_csrf_token = '<%= Plug.CSRFProtection.get_csrf_token() %>';
+            window.hexpm_billing_defer_mount = true;
             window.hexpm_billing_success = function() { window.location.reload(); };
           </script>
-          <div
-            class="mt-4"
-            id="billing-checkout-data"
-            data-post-action={@post_action}
-            data-csrf-token={@csrf_token}
+
+          <.payment_method_modal
+            checkout_html={@checkout_html}
+            post_action={@post_action}
+            csrf_token={@csrf_token}
+          />
+
+          <.button
+            type="button"
+            variant="primary"
+            phx-click={show_modal("payment-method-modal") |> JS.dispatch("payment-modal:opened")}
           >
-            {raw(@checkout_html || "")}
-          </div>
+            Add payment method
+          </.button>
         <% end %>
       </div>
     </div>
@@ -345,6 +403,24 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
 
   defp subscription_badge_class(_),
     do: "bg-grey-100 dark:bg-grey-700 text-grey-600 dark:text-grey-200"
+
+  attr :checkout_html, :string, required: true
+  attr :post_action, :string, required: true
+  attr :csrf_token, :string, required: true
+
+  defp payment_method_modal(assigns) do
+    ~H"""
+    <.modal id="payment-method-modal" title="Payment method" max_width="md">
+      <div
+        id="billing-checkout-data"
+        data-post-action={@post_action}
+        data-csrf-token={@csrf_token}
+      >
+        {raw(@checkout_html || "")}
+      </div>
+    </.modal>
+    """
+  end
 
   attr :current_user, :map, required: true
   attr :organization, :map, required: true
@@ -402,6 +478,7 @@ defmodule HexpmWeb.Dashboard.Organization.Components.BillingSubscription do
         id="add-seats-form"
       >
         <input type="hidden" name="current-seats" value={@quantity} />
+        <input type="hidden" name="nonce" id="add-seats-nonce" value={Ecto.UUID.generate()} />
         <p class="text-sm text-grey-600 dark:text-grey-300 mb-4">
           You have {@quantity} seats of which {@member_count} are in use.
         </p>
