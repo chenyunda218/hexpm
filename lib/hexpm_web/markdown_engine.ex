@@ -4,6 +4,12 @@ defmodule HexpmWeb.MarkdownEngine do
   # Placeholder that will be replaced with the actual nonce at runtime
   @nonce_placeholder "%%SCRIPT_NONCE%%"
 
+  @supported_languages %{
+    "elixir" => Makeup.Lexers.ElixirLexer,
+    "erlang" => Makeup.Lexers.ErlangLexer,
+    "gleam" => Makeup.Lexers.GleamLexer
+  }
+
   def compile(path, _name) do
     html =
       path
@@ -11,6 +17,8 @@ defmodule HexpmWeb.MarkdownEngine do
       |> Earmark.as_html!(%Earmark.Options{gfm: true})
       |> header_anchors("h3")
       |> header_anchors("h4")
+      |> highlight_code_blocks()
+      |> replace_inline_alignment()
       |> inject_nonce_placeholder()
 
     # Generate code that replaces placeholder with actual nonce at runtime
@@ -57,5 +65,42 @@ defmodule HexpmWeb.MarkdownEngine do
 
   defp only_alphanumeric(string) do
     String.replace(string, ~r"([^a-zA-Z0-9\-])", "")
+  end
+
+  # The markdown engine processes trusted internal .md files (not user READMEs),
+  # so regex-based highlighting is appropriate here. Using Floki would normalize
+  # SVG attributes (viewBox -> viewbox) breaking heroicon rendering.
+  defp highlight_code_blocks(html) do
+    Regex.replace(
+      ~r{<pre><code class="([\w-]+)">(.*?)</code></pre>}s,
+      html,
+      fn full_match, lang, code ->
+        language =
+          if String.starts_with?(lang, "language-"),
+            do: String.trim_leading(lang, "language-"),
+            else: lang
+
+        case Map.get(@supported_languages, language) do
+          nil -> full_match
+          lexer -> code |> unescape_html() |> Makeup.highlight(lexer: lexer)
+        end
+      end
+    )
+  end
+
+  defp replace_inline_alignment(html) do
+    Regex.replace(
+      ~r/ style="text-align: (left|center|right);"/,
+      html,
+      fn _, align -> ~s( class="text-#{align}") end
+    )
+  end
+
+  defp unescape_html(html) do
+    html
+    |> String.replace("&amp;", "&")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&quot;", ~s["])
   end
 end

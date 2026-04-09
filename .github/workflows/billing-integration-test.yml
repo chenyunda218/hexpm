@@ -47,13 +47,13 @@ jobs:
           persist-credentials: false
 
       - name: Install OTP and Elixir
-        uses: erlef/setup-beam@e6d7c94229049569db56a7ad5a540c051a010af9 # v1.20.4
+        uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
         with:
           otp-version: ${{ env.otp }}
           elixir-version: ${{ env.elixir }}
 
       - name: Cache dependencies
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
             deps
@@ -66,13 +66,8 @@ jobs:
       - name: Compile
         run: MIX_ENV=test mix compile
 
-      - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: 22
-
       - name: Build assets
-        run: cd assets && yarn install && npx webpack --mode production
+        run: mix assets.deploy
 
       - name: Google auth
         id: auth

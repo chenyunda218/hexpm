@@ -203,6 +203,15 @@ defmodule Hexpm.Accounts.AuditLog do
   defp extract_params("email.public", {old_email, new_email}),
     do: %{old_email: serialize(old_email), new_email: serialize(new_email)}
 
+  defp extract_params("email.options", {old_preferences, new_preferences}) do
+    changes =
+      new_preferences
+      |> Enum.filter(fn {key, value} -> Map.get(old_preferences, key) != value end)
+      |> Map.new()
+
+    %{old_preferences: old_preferences, new_preferences: new_preferences, changes: changes}
+  end
+
   defp extract_params("email.gravatar", {organization, {old_email, new_email}}),
     do: %{
       organization: serialize(organization),
@@ -359,7 +368,10 @@ defmodule Hexpm.Accounts.AuditLog do
   defp fields(%ReleaseRetirement{}), do: [:status, :message]
   defp fields(%Organization{}), do: [:id, :name, :public, :active, :billing_active]
   defp fields(%User{}), do: [:id, :username]
-  defp fields(%UserHandles{}), do: [:twitter, :bluesky, :github, :elixirforum, :freenode, :slack]
+
+  defp fields(%UserHandles{}),
+    do: [:twitter, :bluesky, :github, :elixirforum, :freenode, :slack, :url]
+
   defp fields(%Hexpm.UserSession{}), do: [:id, :type, :name, :client_id]
   defp fields(%Hexpm.OAuth.Client{}), do: [:id, :name]
 

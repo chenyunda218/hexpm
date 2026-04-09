@@ -5,12 +5,12 @@ defmodule Hexpm.Billing do
 
   # TODO: Remove when all customers migrated to SCA/PaymentIntents
   def checkout(organization, data), do: impl().checkout(organization, data)
-  def get(organization), do: impl().get(organization)
+  def get(organization, opts \\ []), do: impl().get(organization, opts)
   def cancel(organization), do: impl().cancel(organization)
   def create(params), do: impl().create(params)
   def update(organization, params), do: impl().update(organization, params)
   def change_plan(organization, params), do: impl().change_plan(organization, params)
-  def invoice(id), do: impl().invoice(id)
+  def invoice(id, opts \\ []), do: impl().invoice(id, opts)
   def pay_invoice(id), do: impl().pay_invoice(id)
   def report(), do: impl().report()
 
@@ -79,9 +79,14 @@ defmodule Hexpm.Billing do
   def change_plan(organization_name, params,
         audit: %{audit_data: audit_data, organization: organization}
       ) do
-    impl().change_plan(organization_name, params)
-    Repo.insert!(audit(audit_data, "billing.change_plan", {organization, params}))
-    :ok
+    case impl().change_plan(organization_name, params) do
+      :ok ->
+        Repo.insert!(audit(audit_data, "billing.change_plan", {organization, params}))
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def pay_invoice(id, audit: %{audit_data: audit_data, organization: organization}) do

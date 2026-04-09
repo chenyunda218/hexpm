@@ -12,9 +12,12 @@ defmodule Hexpm.Billing.Hexpm do
     end
   end
 
-  def get(organization) do
+  def get(organization, opts \\ []) do
+    query = URI.encode_query(Enum.reject(opts, fn {_k, v} -> is_nil(v) end))
+    url = "/api/customers/#{organization}?#{query}"
+
     result =
-      fn -> get_json("/api/customers/#{organization}") end
+      fn -> get_json(url) end
       |> Hexpm.HTTP.retry("billing")
 
     case result do
@@ -61,13 +64,18 @@ defmodule Hexpm.Billing.Hexpm do
   end
 
   def change_plan(organization, params) do
-    {:ok, 204, _headers, _body} = post("/api/customers/#{organization}/plan", params)
-    :ok
+    case post("/api/customers/#{organization}/plan", params) do
+      {:ok, 204, _headers, _body} -> :ok
+      {:ok, 422, _headers, body} -> {:error, body}
+    end
   end
 
-  def invoice(id) do
+  def invoice(id, opts \\ []) do
+    query = URI.encode_query(Enum.reject(opts, fn {_k, v} -> is_nil(v) end))
+    url = "/api/invoices/#{id}/html?#{query}"
+
     {:ok, 200, _headers, body} =
-      fn -> get_html("/api/invoices/#{id}/html") end
+      fn -> get_html(url) end
       |> Hexpm.HTTP.retry("billing")
 
     body
