@@ -41,7 +41,7 @@ defmodule HexpmWeb.Components.PackageLayout do
   slot :inner_content, required: true
 
   def package_layout(assigns) do
-    tools = [mix: "mix.exs", rebar: "rebar.config", erlang_mk: "erlang.mk"]
+    tools = [mix: "mix.exs", rebar: "rebar.config", gleam: "Gleam", erlang_mk: "erlang.mk"]
 
     {graph_labels, graph_points, graph_fill} =
       if assigns.daily_graph != [],
