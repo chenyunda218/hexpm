@@ -59,7 +59,11 @@ defmodule Hexpm.Accounts.UserHandles do
     end)
   end
 
-  def handle(:twitter, handle), do: unuri(handle, "x.com", "/")
+  def handle(:twitter, handle) do
+    handle = String.replace(handle, "twitter.com", "x.com")
+    unuri(handle, "x.com", "/")
+  end
+
   def handle(:bluesky, handle), do: unuri(handle, "bsky.app", "/profile/")
   def handle(:github, handle), do: unuri(handle, "github.com", "/")
   def handle(:elixirforum, handle), do: unuri(handle, "elixirforum.com", "/u/")

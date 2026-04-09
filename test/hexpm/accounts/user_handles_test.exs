@@ -82,6 +82,24 @@ defmodule Hexpm.Accounts.UserHandlesTest do
                ]
     end
 
+    test "handles with legacy twitter.com URLs" do
+      user =
+        build(:user,
+          handles: build(:user_handles, twitter: "https://twitter.com/eric")
+        )
+
+      assert UserHandles.render(user) == [{"X.com", "eric", "https://x.com/eric"}]
+    end
+
+    test "handles with legacy twitter.com without scheme" do
+      user =
+        build(:user,
+          handles: build(:user_handles, twitter: "twitter.com/eric")
+        )
+
+      assert UserHandles.render(user) == [{"X.com", "eric", "https://x.com/eric"}]
+    end
+
     test "handle with full URL" do
       user = build(:user, handles: build(:user_handles, twitter: "https://example.com"))
       assert UserHandles.render(user) == []
