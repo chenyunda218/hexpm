@@ -11,18 +11,14 @@ defmodule HexpmWeb.Readme.TaskList do
   @checkbox_pattern ~r/^\[([ xX])\]\s?/
 
   def convert(ast) do
-    Enum.map(ast, &convert_node/1)
+    Earmark.Transform.map_ast(ast, &convert_node/1, false)
   end
 
   defp convert_node({"li", attrs, children, meta}) do
-    {"li", attrs, convert_li_children(children), meta}
+    {:replace, {"li", attrs, children |> convert_li_children() |> convert(), meta}}
   end
 
-  defp convert_node({tag, attrs, children, meta}) do
-    {tag, attrs, convert(children), meta}
-  end
-
-  defp convert_node(text) when is_binary(text), do: text
+  defp convert_node(node), do: node
 
   defp convert_li_children([text | rest]) when is_binary(text) do
     case Regex.run(@checkbox_pattern, text) do
@@ -48,7 +44,7 @@ defmodule HexpmWeb.Readme.TaskList do
     end
   end
 
-  defp convert_li_children(children), do: children
+  defp convert_li_children(children), do: Enum.map(children, &convert_node/1)
 
   defp checkbox_input(" ") do
     {"input", [{"type", "checkbox"}, {"disabled", "disabled"}], [], %{}}
