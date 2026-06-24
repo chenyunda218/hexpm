@@ -4,6 +4,45 @@ defmodule Hexpm.Accounts.OrganizationsTest do
   alias Hexpm.Accounts.Organizations
   alias Hexpm.Repository.PackageOwner
 
+  describe "create/3" do
+    test "publishes org_names.csv to the docs bucket" do
+      user = insert(:user)
+
+      params = %{
+        "name" => "acmecorp_#{System.unique_integer([:positive])}"
+      }
+
+      assert {:ok, organization} =
+               Organizations.create(user, params, audit: audit_data(user))
+
+      csv = Hexpm.Store.get(:docs_bucket, "org_names.csv", [])
+      assert csv =~ organization.name
+      refute csv =~ "hexpm\n"
+      refute String.starts_with?(csv, "hexpm")
+    end
+
+    test "rejects reserved package names" do
+      user = insert(:user)
+
+      for name <- ~w(elixir mix kernel api docs phoenix acme) do
+        assert {:error, %{errors: [name: {"is reserved", _}]}} =
+                 Organizations.create(user, %{"name" => name}, audit: audit_data(user))
+      end
+    end
+  end
+
+  describe "create/3 with reserved username" do
+    test "rejects an organization name in reserved_usernames" do
+      Repo.insert!(%Hexpm.Accounts.ReservedUsername{name: "graveyard"})
+      user = insert(:user)
+
+      assert {:error, changeset} =
+               Organizations.create(user, %{"name" => "graveyard"}, audit: audit_data(user))
+
+      assert %{username: "has already been taken"} = errors_on(changeset)
+    end
+  end
+
   describe "remove_member/3" do
     test "cannot remove last member" do
       user = insert(:user)

@@ -87,12 +87,150 @@ defmodule Hexpm.Accounts.Users do
     case Repo.transaction(multi) do
       {:ok, %{user: %{emails: [email]} = user}} ->
         Emails.verification(user, email)
-        |> Mailer.deliver_later!()
+        |> Mailer.deliver!()
 
         {:ok, user}
 
       {:error, :user, changeset, _} ->
         {:error, changeset}
+    end
+  end
+
+  def delete_eligibility(user) do
+    cond do
+      User.organization?(user) ->
+        {:error, :organization_account}
+
+      (organizations = organizations_blocking_delete(user)) != [] ->
+        {:error, {:organizations, organizations}}
+
+      true ->
+        {:ok, %{sole_owned_packages: sole_owned_packages(user)}}
+    end
+  end
+
+  defp organizations_blocking_delete(user) do
+    user = Repo.preload(user, organizations: :organization_users)
+
+    user.organizations
+    |> Enum.filter(fn organization ->
+      members = organization.organization_users
+      admins = Enum.filter(members, &(&1.role == "admin"))
+
+      length(members) == 1 or
+        (length(admins) == 1 and hd(admins).user_id == user.id)
+    end)
+    |> Enum.sort_by(& &1.name)
+  end
+
+  defp sole_owned_packages(user) do
+    owned = from(po in PackageOwner, where: po.user_id == ^user.id, select: po.package_id)
+
+    from(
+      p in Package,
+      join: po in PackageOwner,
+      on: po.package_id == p.id,
+      where: p.repository_id == 1 and p.id in subquery(owned),
+      group_by: p.id,
+      having: count(po.id) == 1,
+      order_by: p.name
+    )
+    |> Repo.all()
+  end
+
+  def delete(user, opts) do
+    audit_data = Keyword.fetch!(opts, :audit)
+    notify? = Keyword.get(opts, :notify, true)
+    user = Repo.preload(user, :emails)
+
+    multi =
+      Multi.new()
+      |> audit(audit_data, "user.delete", user)
+      |> Multi.insert(:reserved_username, %ReservedUsername{name: user.username},
+        on_conflict: :nothing
+      )
+      # Keys and OAuth tokens cascade when the user is deleted, but audit logs
+      # reference both them and the user with ON DELETE SET NULL. Deleting them
+      # in their own statements first keeps the cascade from hitting a foreign
+      # key trigger ordering issue that can otherwise fail the deletion.
+      |> Multi.delete_all(:keys, assoc(user, :keys))
+      |> Multi.delete_all(
+        :oauth_tokens,
+        from(t in Hexpm.OAuth.Token, where: t.user_id == ^user.id)
+      )
+      |> Multi.delete(:user, user, stale_error_field: :id)
+
+    case Repo.transaction(multi) do
+      {:ok, _} ->
+        if notify? && User.email(user, :primary) do
+          Emails.account_deleted(user)
+          |> Mailer.deliver!()
+        end
+
+        :ok
+
+      {:error, _operation, changeset, _changes} ->
+        {:error, changeset}
+    end
+  end
+
+  def delete_request(user, audit: audit_data) do
+    with {:ok, _warnings} <- delete_eligibility(user) do
+      user = Repo.preload(user, :emails)
+
+      if User.email(user, :primary) do
+        changeset =
+          AccountDeletionRequest.changeset(
+            build_assoc(user, :account_deletion_requests),
+            user
+          )
+
+        result =
+          Multi.new()
+          |> Multi.delete_all(:existing_requests, assoc(user, :account_deletion_requests))
+          |> Multi.insert(:request, changeset)
+          |> audit(audit_data, "user.delete.request", user)
+          |> Repo.transaction()
+
+        case result do
+          {:ok, %{request: request}} ->
+            Emails.account_deletion_request(user, request)
+            |> Mailer.deliver!()
+
+            :ok
+
+          {:error, :request, _changeset, _} ->
+            if request = Repo.get_by(AccountDeletionRequest, user_id: user.id) do
+              Emails.account_deletion_request(user, request)
+              |> Mailer.deliver!()
+            end
+
+            :ok
+        end
+      else
+        {:error, :no_primary_email}
+      end
+    end
+  end
+
+  def get_delete_request(user, key) when is_binary(key) do
+    user = Repo.preload(user, :emails)
+    request = Repo.get_by(AccountDeletionRequest, user_id: user.id)
+
+    if request && AccountDeletionRequest.can_confirm?(request, user, key) do
+      request
+    end
+  end
+
+  def get_delete_request(_user, _key), do: nil
+
+  def delete_confirm(user, key, audit: audit_data) do
+    if get_delete_request(user, key) do
+      with {:ok, _warnings} <- delete_eligibility(user) do
+        delete(user, audit: audit_data)
+      end
+    else
+      {:error, :invalid_request}
     end
   end
 
@@ -110,7 +248,7 @@ defmodule Hexpm.Accounts.Users do
       |> Repo.update!()
 
     Emails.verification(user, email)
-    |> Mailer.deliver_later!()
+    |> Mailer.deliver!()
 
     email
   end
@@ -209,13 +347,14 @@ defmodule Hexpm.Accounts.Users do
     multi =
       Multi.new()
       |> Multi.update(:user, User.update_password(user, params))
+      |> Multi.delete_all(:account_deletion_requests, assoc(user, :account_deletion_requests))
       |> audit(audit_data, "password.update", nil)
 
     case Repo.transaction(multi) do
       {:ok, %{user: user}} ->
         user
         |> Emails.password_changed()
-        |> Mailer.deliver_later!()
+        |> Mailer.deliver!()
 
         {:ok, user}
 
@@ -240,7 +379,7 @@ defmodule Hexpm.Accounts.Users do
         {:ok, %{user: user}} ->
           user
           |> Emails.tfa_enabled()
-          |> Mailer.deliver_later!()
+          |> Mailer.deliver!()
 
           {:ok, user}
 
@@ -262,7 +401,7 @@ defmodule Hexpm.Accounts.Users do
       {:ok, %{user: user}} ->
         user
         |> Emails.tfa_disabled()
-        |> Mailer.deliver_later!()
+        |> Mailer.deliver!()
 
         user
 
@@ -281,7 +420,7 @@ defmodule Hexpm.Accounts.Users do
       {:ok, %{user: user}} ->
         user
         |> Emails.tfa_rotate_recovery_codes()
-        |> Mailer.deliver_later!()
+        |> Mailer.deliver!()
 
         user
 
@@ -314,7 +453,7 @@ defmodule Hexpm.Accounts.Users do
         |> Repo.transaction()
 
       Emails.password_reset_request(user, reset)
-      |> Mailer.deliver_later!()
+      |> Mailer.deliver!()
 
       :ok
     else
@@ -351,6 +490,7 @@ defmodule Hexpm.Accounts.Users do
       Multi.new()
       |> Multi.update(:password, User.update_password_no_check(user, params))
       |> Multi.delete_all(:reset, assoc(user, :password_resets))
+      |> Multi.delete_all(:account_deletion_requests, assoc(user, :account_deletion_requests))
       |> Multi.update_all(:revoke_sessions, sessions_query, [])
       |> Multi.update_all(:revoke_tokens, tokens_query, [])
 
@@ -376,7 +516,10 @@ defmodule Hexpm.Accounts.Users do
         user = Repo.preload(user, :emails, force: true)
 
         Emails.verification(user, email)
-        |> Mailer.deliver_later!()
+        |> Mailer.deliver!()
+
+        Emails.email_added(user, email)
+        |> Mailer.deliver!()
 
         {:ok, user}
 
@@ -414,15 +557,28 @@ defmodule Hexpm.Accounts.Users do
     organization_error(user, "cannot set email of organizations")
   end
 
-  def primary_email(user, params, opts) do
+  def primary_email(user, params, [audit: _audit_data] = opts) do
+    old_primary = User.email(user, :primary)
+
     multi =
       Multi.new()
       |> email_flag_multi(user, params, :primary, opts)
       |> Multi.delete_all(:reset, assoc(user, :password_resets))
+      |> Multi.delete_all(:account_deletion_requests, assoc(user, :account_deletion_requests))
 
     case Repo.transaction(multi) do
-      {:ok, _} -> :ok
-      {:error, :primary_email, reason, _} -> {:error, reason}
+      {:ok, _} ->
+        new_primary = params["email"]
+
+        if is_binary(new_primary) and old_primary != new_primary do
+          Emails.primary_email_changed(user, old_primary, new_primary)
+          |> Mailer.deliver!()
+        end
+
+        :ok
+
+      {:error, :primary_email, reason, _} ->
+        {:error, reason}
     end
   end
 
@@ -529,7 +685,7 @@ defmodule Hexpm.Accounts.Users do
 
       true ->
         Emails.verification(user, email)
-        |> Mailer.deliver_later!()
+        |> Mailer.deliver!()
 
         :ok
     end
@@ -589,7 +745,7 @@ defmodule Hexpm.Accounts.Users do
       {:ok, %{user: user}} ->
         if not confirmed? do
           Emails.verification(user, List.first(user.emails))
-          |> Mailer.deliver_later!()
+          |> Mailer.deliver!()
         end
 
         {:ok, user}

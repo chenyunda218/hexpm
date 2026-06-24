@@ -20,6 +20,19 @@ Hexpm.Repo.transaction(fn ->
     allowed_scopes: ["api", "api:read", "api:write", "repositories"]
   )
 
+  insert(:oauth_client,
+    name: "Bob",
+    client_id: "b0b00000-0000-4000-8000-000000000b0b",
+    client_type: "confidential",
+    client_secret: "dev_secret_for_testing",
+    allowed_grant_types: ["authorization_code", "refresh_token"],
+    allowed_scopes: ["api:read"],
+    redirect_uris: [
+      "https://bob.hex.pm/oauth/callback",
+      "http://localhost:4003/oauth/callback"
+    ]
+  )
+
   insert(
     :key,
     user_id: Users.get("hexdocs").id,
@@ -92,7 +105,7 @@ Hexpm.Repo.transaction(fn ->
       meta:
         build(
           :package_metadata,
-          licenses: ["Apache-2.0", "MIT"],
+          licenses: ["Apache-2.0", "MIT", "LicenseRef-Journey"],
           links: %{
             "Github" => "http://example.com/github",
             "Documentation" => "http://example.com/documentation"
@@ -101,7 +114,7 @@ Hexpm.Repo.transaction(fn ->
         )
     )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: decimal,
     version: "0.0.1",
@@ -114,7 +127,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: decimal,
     version: "0.0.2",
@@ -128,7 +141,7 @@ Hexpm.Repo.transaction(fn ->
   )
 
   decimal_release =
-    insert(
+    insert_with_tarball(
       :release,
       package: decimal,
       version: "0.1.0",
@@ -190,7 +203,7 @@ Hexpm.Repo.transaction(fn ->
         )
     )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: oidcc,
     version: "3.0.0",
@@ -203,7 +216,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: oidcc,
     version: "3.0.2",
@@ -216,7 +229,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: oidcc,
     version: "3.1.0",
@@ -224,7 +237,7 @@ Hexpm.Repo.transaction(fn ->
     meta: build(:release_metadata, app: "oidcc", build_tools: ["mix"])
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: oidcc,
     version: "3.1.1",
@@ -236,7 +249,7 @@ Hexpm.Repo.transaction(fn ->
     }
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: oidcc,
     version: "3.1.2",
@@ -244,7 +257,7 @@ Hexpm.Repo.transaction(fn ->
     meta: build(:release_metadata, app: "oidcc", build_tools: ["mix"])
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: oidcc,
     version: "3.1.3",
@@ -287,7 +300,62 @@ Hexpm.Repo.transaction(fn ->
     ]
   }
 
-  Hexpm.Security.Advisories.upsert([oidcc_advisory_record], %{"oidcc" => oidcc.id})
+  oidcc_ghsa_alias_advisory_record = %{
+    id: "GHSA-628h-q48j-jr6q",
+    summary: "GHSA source for a duplicate alias advisory",
+    aliases: ["CVE-2026-32689"],
+    published_at: ~U[2026-05-08 00:00:00Z],
+    modified_at: ~U[2026-05-08 00:00:00Z],
+    withdrawn_at: nil,
+    cvss_vector: nil,
+    cvss_score: nil,
+    cvss_rating: nil,
+    references: [
+      %{
+        type: "WEB",
+        url: "https://github.com/phoenixframework/phoenix/security/advisories/GHSA-628h-q48j-jr6q"
+      },
+      %{type: "WEB", url: "https://cna.erlef.org/cves/CVE-2026-32689.html"}
+    ],
+    affected: [
+      %{
+        package: "oidcc",
+        requirements: [Version.parse_requirement!(">= 3.0.0 and < 3.0.2")],
+        versions: ["3.0.0"]
+      }
+    ]
+  }
+
+  oidcc_eef_alias_advisory_record = %{
+    id: "EEF-CVE-2026-32689",
+    summary: "EEF source for a duplicate alias advisory",
+    aliases: ["CVE-2026-32689", "GHSA-628h-q48j-jr6q"],
+    published_at: ~U[2026-05-05 00:00:00Z],
+    modified_at: ~U[2026-05-10 00:00:00Z],
+    withdrawn_at: nil,
+    cvss_vector: nil,
+    cvss_score: nil,
+    cvss_rating: nil,
+    references: [
+      %{type: "ADVISORY", url: "https://cna.erlef.org/cves/CVE-2026-32689.html"}
+    ],
+    affected: [
+      %{
+        package: "oidcc",
+        requirements: [Version.parse_requirement!(">= 3.1.2 and < 3.1.4")],
+        versions: ["3.1.2", "3.1.3"]
+      }
+    ]
+  }
+
+  Hexpm.Security.Advisories.upsert(
+    [
+      oidcc_advisory_record,
+      oidcc_ghsa_alias_advisory_record,
+      oidcc_eef_alias_advisory_record
+    ],
+    %{"oidcc" => oidcc.id}
+  )
 
   postgrex =
     insert(
@@ -303,7 +371,7 @@ Hexpm.Repo.transaction(fn ->
         )
     )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: postgrex,
     version: "0.0.1",
@@ -316,7 +384,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: postgrex,
     version: "0.0.2",
@@ -339,7 +407,7 @@ Hexpm.Repo.transaction(fn ->
   )
 
   postgrex_release =
-    insert(
+    insert_with_tarball(
       :release,
       package: postgrex,
       version: "0.1.0",
@@ -405,7 +473,7 @@ Hexpm.Repo.transaction(fn ->
         )
     )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: ecto,
     version: "0.0.1",
@@ -418,7 +486,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: ecto,
     version: "0.0.2",
@@ -439,7 +507,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: ecto,
     version: "0.1.0",
@@ -460,7 +528,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: ecto,
     version: "0.1.1",
@@ -481,7 +549,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: ecto,
     version: "0.1.2",
@@ -508,7 +576,7 @@ Hexpm.Repo.transaction(fn ->
       )
   )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: ecto,
     version: "0.1.3",
@@ -536,7 +604,7 @@ Hexpm.Repo.transaction(fn ->
   )
 
   rel =
-    insert(
+    insert_with_tarball(
       :release,
       package: ecto,
       version: "0.2.0",
@@ -612,7 +680,7 @@ Hexpm.Repo.transaction(fn ->
         )
     )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: private,
     version: "0.0.1",
@@ -640,7 +708,7 @@ Hexpm.Repo.transaction(fn ->
         )
     )
 
-  insert(
+  insert_with_tarball(
     :release,
     package: other_private,
     version: "0.0.1",
@@ -679,7 +747,7 @@ Hexpm.Repo.transaction(fn ->
       )
 
     rel1 =
-      insert(
+      insert_with_tarball(
         :release,
         package: ups,
         version: "0.0.1",
@@ -693,7 +761,7 @@ Hexpm.Repo.transaction(fn ->
       )
 
     rel2 =
-      insert(
+      insert_with_tarball(
         :release,
         package: ups,
         version: "0.2.0",
@@ -765,7 +833,7 @@ Hexpm.Repo.transaction(fn ->
     )
 
   rel =
-    insert(
+    insert_with_tarball(
       :release,
       package: nerves,
       version: "0.0.1",
@@ -806,7 +874,7 @@ Hexpm.Repo.transaction(fn ->
       )
 
     rel =
-      insert(
+      insert_with_tarball(
         :release,
         package: nerves,
         version: "0.0.1",
@@ -831,6 +899,8 @@ Hexpm.Repo.transaction(fn ->
   Hexpm.Repo.refresh_view(PackageDownload, concurrently: false)
   Hexpm.Repo.refresh_view(ReleaseDownload, concurrently: false)
 end)
+
+Hexpm.Repository.PackageDependants.backfill()
 
 Hexpm.Repository.RegistryBuilder.full(Hexpm.Repository.Repositories.get("hexpm"))
 Hexpm.Repository.RegistryBuilder.full(Hexpm.Repository.Repositories.get("myrepo"))

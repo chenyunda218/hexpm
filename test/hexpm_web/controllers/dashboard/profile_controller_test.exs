@@ -1,6 +1,5 @@
 defmodule HexpmWeb.Dashboard.ProfileControllerTest do
   use HexpmWeb.ConnCase, async: true
-  use Bamboo.Test
 
   alias Hexpm.Accounts.{User, Users}
 
@@ -22,6 +21,15 @@ defmodule HexpmWeb.Dashboard.ProfileControllerTest do
       |> get("/dashboard/profile")
 
     assert response(conn, 200) =~ "Public profile"
+  end
+
+  test "does not show pending section when there are no invites", c do
+    conn =
+      build_conn()
+      |> test_login(c.user)
+      |> get("/dashboard/profile")
+
+    refute response(conn, 200) =~ "Pending package invitations"
   end
 
   test "requires login" do

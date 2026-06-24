@@ -1,6 +1,6 @@
 defmodule HexpmWeb.API.OwnerControllerTest do
   use HexpmWeb.ConnCase, async: true
-  use Bamboo.Test
+  import Swoosh.TestAssertions
 
   alias Hexpm.Accounts.AuditLog
   alias Hexpm.Repository.{Owners, PackageOwner}
@@ -248,7 +248,7 @@ defmodule HexpmWeb.API.OwnerControllerTest do
       assert Owners.get(package, user2).level == "full"
 
       recipients = Enum.sort([user1, user2])
-      assert_delivered_email(Hexpm.Emails.owner_added(package, recipients, user2))
+      assert_email_sent(Hexpm.Emails.owner_added(package, recipients, user2))
 
       log = Hexpm.Repo.one!(AuditLog)
       assert log.user_id == user1.id
@@ -293,13 +293,12 @@ defmodule HexpmWeb.API.OwnerControllerTest do
       # 1. As the newly added individual owner
       # 2. As an admin of the organization owner
       # The email_to function should deduplicate them
-      assert_received {:delivered_email, email}
+      assert_received {:email, email}
 
       # Check that there are no duplicate recipients
       recipient_emails =
         email.to
         |> Enum.map(fn
-          %{address: address} -> address
           {_name, address} -> address
           address when is_binary(address) -> address
         end)
@@ -446,6 +445,32 @@ defmodule HexpmWeb.API.OwnerControllerTest do
       |> put_req_header("authorization", key_for(user1))
       |> put("/api/packages/#{package.name}/owners/#{hd(user2.emails).email}")
       |> response(400)
+    end
+
+    test "cannot demote last full owner via API", %{user1: user1, package: package} do
+      resp =
+        build_conn()
+        |> put_req_header("authorization", key_for(user1))
+        |> put("/api/packages/#{package.name}/owners/#{user1.username}", %{level: "maintainer"})
+        |> json_response(422)
+
+      assert resp["errors"]["username"] =~ "last full owner"
+      assert Owners.get(package, user1).level == "full"
+    end
+
+    test "can demote full owner to maintainer when another full owner exists", %{
+      user1: user1,
+      user2: user2,
+      package: package
+    } do
+      insert(:package_owner, package: package, user: user2, level: "full")
+
+      build_conn()
+      |> put_req_header("authorization", key_for(user1))
+      |> put("/api/packages/#{package.name}/owners/#{user2.username}", %{level: "maintainer"})
+      |> response(204)
+
+      assert Owners.get(package, user2).level == "maintainer"
     end
   end
 
@@ -617,7 +642,7 @@ defmodule HexpmWeb.API.OwnerControllerTest do
       assert user.id == user1.id
 
       recipients = Enum.sort([user1, user2])
-      assert_delivered_email(Hexpm.Emails.owner_removed(package, recipients, user2))
+      assert_email_sent(Hexpm.Emails.owner_removed(package, recipients, user2))
 
       log = Hexpm.Repo.one!(AuditLog)
       assert log.user_id == user1.id

@@ -32,13 +32,12 @@ defmodule Hexpm.MixProject do
 
   defp deps() do
     [
-      {:bamboo_phoenix, "~> 1.0"},
-      {:bamboo, "~> 2.2"},
+      {:swoosh, "~> 1.0"},
+      {:phoenix_swoosh, "~> 1.0"},
       {:bandit, "~> 1.0"},
       {:bcrypt_elixir, "~> 3.0"},
       {:corsica, "~> 2.0"},
       {:cvss, "~> 0.1.0"},
-      {:earmark, "~> 1.4"},
       {:ecto_psql_extras, "~> 0.6"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:ecto_sql, "~> 3.0"},
@@ -47,21 +46,18 @@ defmodule Hexpm.MixProject do
       {:ex_aws_s3, "~> 2.0"},
       {:ex_aws, "~> 2.0"},
       {:ex_machina, "~> 2.0"},
-      {:finch, "~> 0.21.0"},
+      {:finch, "~> 0.22.0"},
       {:floki, "~> 0.37"},
       {:goth, "~> 1.4"},
-      {:hackney, "~> 1.7"},
-      {:hex_core, "~> 0.14", hex_core_opts()},
+      {:hex_core, "~> 0.18", hex_core_opts()},
       {:jason, "~> 1.0"},
       {:joken, "~> 2.6"},
       {:lasso, "~> 0.1.4", only: :test},
       {:libcluster, "~> 3.0"},
       {:logster, "~> 1.0"},
-      {:makeup, "~> 1.2"},
-      {:makeup_elixir, "~> 1.0"},
-      {:makeup_erlang, "~> 1.0"},
-      {:makeup_syntect, "~> 0.1"},
-      {:makeup_gleam, "~> 1.0"},
+      {:mdex, "~> 0.13"},
+      {:mdex_gfm, "~> 0.1"},
+      {:lumis, "~> 0.6"},
       {:mox, "~> 1.0", only: :test},
       {:nimble_ownership, "~> 1.0"},
       {:stream_data, "~> 1.0", only: :test},
@@ -69,6 +65,7 @@ defmodule Hexpm.MixProject do
       {:phoenix_html, "~> 4.0"},
       {:phoenix_html_helpers, "~> 1.0"},
       {:phoenix_live_dashboard, "~> 0.6"},
+      {:phoenix_live_view, "~> 1.0"},
       {:phoenix_live_reload, "~> 1.0", only: :dev},
       {:phoenix_pubsub, "~> 2.0"},
       {:phoenix_view, "~> 2.0"},
@@ -88,8 +85,8 @@ defmodule Hexpm.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:ueberauth, "~> 0.10"},
       {:ueberauth_github, "~> 0.8"},
-      {:wallaby, "~> 0.30", only: :test, runtime: false},
-      {:req, "~> 0.5.6"}
+      {:lazy_html, ">= 0.1.0", only: :test},
+      {:req, "~> 0.6.1"}
     ]
   end
 
@@ -97,16 +94,25 @@ defmodule Hexpm.MixProject do
     if path = System.get_env("HEX_CORE_PATH") do
       [path: path]
     else
-      []
+      # TODO: revert to the published `{:hex_core, "~> 0.19"}` dependency once a
+      # hex_core release ships the per-repository policy model
+      [github: "hexpm/hex_core"]
     end
   end
 
   defp aliases() do
     [
-      setup: ["deps.get", "ecto.setup", "esbuild.install", "tailwind.install"],
+      setup: [
+        "deps.get",
+        "ecto.setup",
+        "esbuild.install",
+        "tailwind.install",
+        "generate_lumis_css"
+      ],
       "ecto.setup": ["ecto.reset", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.create", "ecto.load", "ecto.migrate"],
       "assets.deploy": [
+        "generate_lumis_css",
         "esbuild hexpm --minify",
         "tailwind default --minify",
         "phx.digest"

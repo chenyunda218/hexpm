@@ -19,12 +19,13 @@ defmodule Hexpm.Accounts.Organization do
     has_many :users, through: [:organization_users, :user]
     has_many :keys, Key
     has_many :audit_logs, AuditLog, foreign_key: :organization_id
+    has_many :policies, Hexpm.Repository.Policy
   end
 
-  @name_regex ~r"^[a-z0-9_\-\.]+$"
+  @name_regex ~r"^[a-z0-9_]+$"
   @roles ~w(admin write read)
 
-  @reserved_names ~w(www staging elixir erlang otp rebar rebar3 phoenix acme search)
+  @reserved_names Enum.uniq(Hexpm.Repository.Package.reserved_names() ++ ~w(phoenix acme))
 
   def changeset(struct, params) do
     cast(struct, params, ~w(name)a)
@@ -93,13 +94,15 @@ defmodule Hexpm.Accounts.Organization do
   end
 
   def verify_permissions(%Organization{} = organization, "package", name) do
-    [organization_name, package] = String.split(name, "/", parts: 2)
-    package = Packages.get(organization_name, package)
+    case String.split(name, "/", parts: 2) do
+      [organization_name, package_name] when organization_name == organization.name ->
+        case Packages.get(organization_name, package_name) do
+          nil -> :error
+          package -> {:ok, package}
+        end
 
-    if package && Packages.owner_with_access?(package, organization.user) do
-      {:ok, package}
-    else
-      :error
+      _ ->
+        :error
     end
   end
 

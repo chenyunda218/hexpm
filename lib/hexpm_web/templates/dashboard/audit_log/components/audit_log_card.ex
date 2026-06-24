@@ -164,6 +164,7 @@ defmodule HexpmWeb.Dashboard.AuditLog.Components.AuditLogCard do
   defp icon_for_action("owner." <> _), do: "user-group"
   defp icon_for_action("billing." <> _), do: "credit-card"
   defp icon_for_action("user." <> _), do: "user"
+  defp icon_for_action("policy." <> _), do: "shield-check"
   defp icon_for_action(_), do: "clock"
 
   defp humanize_action(%AuditLog{
@@ -193,6 +194,17 @@ defmodule HexpmWeb.Dashboard.AuditLog.Components.AuditLogCard do
          params: %{"user" => %{"username" => username}, "package" => %{"name" => pkg}}
        }) do
     "Added #{username} as owner of #{pkg}"
+  end
+
+  defp humanize_action(%AuditLog{
+         action: "owner.update",
+         params: %{
+           "user" => %{"username" => username},
+           "level" => level,
+           "package" => %{"name" => pkg}
+         }
+       }) do
+    "Updated #{username}'s role to #{level} on #{pkg}"
   end
 
   defp humanize_action(%AuditLog{
@@ -452,6 +464,26 @@ defmodule HexpmWeb.Dashboard.AuditLog.Components.AuditLogCard do
          params: %{"provider" => provider}
        }) do
     "Disconnected #{provider} account"
+  end
+
+  defp humanize_action(%AuditLog{action: "policy.create", params: %{"name" => name}}) do
+    "Created policy #{name}"
+  end
+
+  defp humanize_action(%AuditLog{action: "policy.update", params: %{"name" => name}}) do
+    "Updated policy #{name}"
+  end
+
+  defp humanize_action(%AuditLog{action: "policy.delete", params: %{"name" => name}}) do
+    "Deleted policy #{name}"
+  end
+
+  defp humanize_action(%AuditLog{action: "user.delete.request"}) do
+    "Requested account deletion"
+  end
+
+  defp humanize_action(%AuditLog{action: "user.delete"}) do
+    "Deleted user account"
   end
 
   defp humanize_action(%AuditLog{action: action}) do

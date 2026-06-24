@@ -32,6 +32,7 @@ defmodule Hexpm.Repo do
   defdelegate one(queryable, opts \\ []), to: RepoBase
   defdelegate preload(structs_or_struct_or_nil, preloads, opts \\ []), to: RepoBase
 
+  defwrite(advisory_xact_lock(key, opts \\ []))
   defwrite(try_advisory_xact_lock?(key, opts \\ []))
   defwrite(try_advisory_lock?(key, opts \\ []))
   defwrite(advisory_unlock(key, opts \\ []))
@@ -69,7 +70,8 @@ defmodule Hexpm.RepoBase do
 
   @advisory_locks %{
     registry: 1,
-    vulnerability_updater: 2
+    vulnerability_updater: 2,
+    policy: 3
   }
 
   def init(_reason, opts) do
@@ -79,7 +81,6 @@ defmodule Hexpm.RepoBase do
       ca_cert = System.get_env("HEXPM_DATABASE_CA_CERT")
       client_key = System.get_env("HEXPM_DATABASE_CLIENT_KEY")
       client_cert = System.get_env("HEXPM_DATABASE_CLIENT_CERT")
-      common_name = System.get_env("HEXPM_DATABASE_COMMON_NAME")
 
       ssl_opts =
         if ca_cert do
@@ -88,7 +89,15 @@ defmodule Hexpm.RepoBase do
             cacerts: [decode_cert(ca_cert)],
             key: decode_key(client_key),
             cert: decode_cert(client_cert),
-            server_name_indication: String.to_charlist(common_name)
+            # Cloud SQL's server certificate (GOOGLE_MANAGED_INTERNAL_CA) has a Common
+            # Name but no Subject Alternative Name. OTP's TLS hostname verification
+            # requires a SAN and rejects such certificates with
+            # {:bad_cert, {:hostname_check_failed, :missing_subject_altnames}}, so we use
+            # verify-CA semantics: the certificate chain is still validated against the
+            # pinned instance CA above and the mTLS client certificate is still presented,
+            # but the hostname is not matched. (customize_hostname_check does not help —
+            # the missing-SAN check short-circuits before the match_fun runs.)
+            server_name_indication: :disable
           ]
         end
 
@@ -128,6 +137,23 @@ defmodule Hexpm.RepoBase do
     query = ~s(REFRESH MATERIALIZED VIEW #{concurrently} "#{source}")
 
     {:ok, _} = Hexpm.Repo.query(query, [], opts)
+    :ok
+  end
+
+  def advisory_xact_lock(key, opts \\ []) do
+    unless skip_advisory_locks?() do
+      {sub_key, opts} = Keyword.pop(opts, :sub_key)
+
+      {sql, params} =
+        if sub_key do
+          {"SELECT pg_advisory_xact_lock($1, $2)", [Map.fetch!(@advisory_locks, key), sub_key]}
+        else
+          {"SELECT pg_advisory_xact_lock($1)", [Map.fetch!(@advisory_locks, key)]}
+        end
+
+      %Postgrex.Result{} = query!(sql, params, opts)
+    end
+
     :ok
   end
 

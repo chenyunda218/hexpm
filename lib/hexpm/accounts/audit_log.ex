@@ -18,7 +18,7 @@ defmodule Hexpm.Accounts.AuditLog do
   end
 
   def build(%{user: nil} = audit_data, action, params)
-      when action in ~w(password.reset.init password.reset.finish user_provider.create) do
+      when action in ~w(password.reset.init password.reset.finish user_provider.create user.delete) do
     params = extract_params(action, params)
 
     {key, oauth_token} = extract_auth_credential(audit_data.auth_credential)
@@ -63,7 +63,9 @@ defmodule Hexpm.Accounts.AuditLog do
 
     %AuditLog{
       user_id: user_id,
-      organization_id: params[:organization][:id] || params[:package][:organization_id],
+      organization_id:
+        params[:organization][:id] || params[:package][:organization_id] ||
+          params[:organization_id],
       user_data: serialize_user_with_emails(audit_data.user),
       key_data: serialize_key(key),
       key: key,
@@ -159,7 +161,14 @@ defmodule Hexpm.Accounts.AuditLog do
   defp extract_params("key.generate", key), do: serialize(key)
   defp extract_params("key.remove", key), do: serialize(key)
 
+  defp extract_params("policy.create", policy), do: serialize(policy)
+  defp extract_params("policy.update", policy), do: serialize(policy)
+  defp extract_params("policy.delete", policy), do: serialize(policy)
+
   defp extract_params("owner.add", {package, level, user}),
+    do: %{package: serialize(package), level: level, user: serialize(user)}
+
+  defp extract_params("owner.update", {package, level, user}),
     do: %{package: serialize(package), level: level, user: serialize(user)}
 
   defp extract_params("owner.transfer", {package, level, user}),
@@ -223,6 +232,8 @@ defmodule Hexpm.Accounts.AuditLog do
     do: %{old_email: serialize(old_email), new_email: serialize(new_email)}
 
   defp extract_params("user.create", user), do: serialize(user)
+  defp extract_params("user.delete", user), do: serialize(user)
+  defp extract_params("user.delete.request", user), do: serialize(user)
   defp extract_params("user.update", user), do: serialize(user)
   defp extract_params("security.update", user), do: serialize(user)
   defp extract_params("security.rotate_recovery_codes", user), do: serialize(user)
@@ -350,6 +361,12 @@ defmodule Hexpm.Accounts.AuditLog do
     do_serialize(client)
   end
 
+  defp serialize(%Hexpm.Repository.Policy{} = policy) do
+    policy
+    |> do_serialize()
+    |> Map.update!(:repositories, &Enum.map(&1, fn rp -> serialize_repository_policy(rp) end))
+  end
+
   defp serialize(nil), do: nil
   defp serialize(schema), do: do_serialize(schema)
 
@@ -357,6 +374,19 @@ defmodule Hexpm.Accounts.AuditLog do
   defp serialize_if_loaded(assoc), do: serialize(assoc)
 
   defp do_serialize(schema), do: Map.take(schema, fields(schema))
+
+  defp serialize_repository_policy(repository_policy) do
+    %{
+      repository: repository_policy.repository,
+      cooldown: repository_policy.cooldown,
+      advisory_min_severity: repository_policy.advisory_min_severity,
+      retirement_reasons: repository_policy.retirement_reasons,
+      overrides:
+        Enum.map(repository_policy.overrides, fn override ->
+          %{action: override.action, package: override.package, requirement: override.requirement}
+        end)
+    }
+  end
 
   defp fields(%Email{}), do: [:email, :primary, :public, :primary, :gravatar]
   defp fields(%Key{}), do: [:id, :name]
@@ -368,6 +398,9 @@ defmodule Hexpm.Accounts.AuditLog do
   defp fields(%ReleaseRetirement{}), do: [:status, :message]
   defp fields(%Organization{}), do: [:id, :name, :public, :active, :billing_active]
   defp fields(%User{}), do: [:id, :username]
+
+  defp fields(%Hexpm.Repository.Policy{}),
+    do: [:id, :name, :visibility, :description, :repositories, :organization_id]
 
   defp fields(%UserHandles{}),
     do: [:twitter, :bluesky, :github, :elixirforum, :freenode, :slack, :url]
@@ -386,6 +419,16 @@ defmodule Hexpm.Accounts.AuditLog do
     from(l in all_by(schema), select: count())
   end
 
+  def count_by_policies(%Hexpm.Accounts.Organization{} = organization) do
+    from(l in AuditLog,
+      where:
+        l.organization_id == ^organization.id and
+          l.action in ["policy.create", "policy.update", "policy.delete"],
+      group_by: fragment("? ->> 'name'", l.params),
+      select: {fragment("? ->> 'name'", l.params), count()}
+    )
+  end
+
   def all_by(%Hexpm.Repository.Package{} = package) do
     from(l in AuditLog,
       where: fragment("(? -> 'package' ->> 'id')::integer", l.params) == ^package.id
@@ -398,6 +441,15 @@ defmodule Hexpm.Accounts.AuditLog do
 
   def all_by(%Hexpm.Accounts.User{} = user) do
     Ecto.assoc(user, :audit_logs)
+  end
+
+  def all_by(%Hexpm.Repository.Policy{} = policy) do
+    from(l in AuditLog,
+      where:
+        l.organization_id == ^policy.organization_id and
+          l.action in ["policy.create", "policy.update", "policy.delete"] and
+          fragment("? ->> 'name'", l.params) == ^policy.name
+    )
   end
 
   def newest_first(query) do

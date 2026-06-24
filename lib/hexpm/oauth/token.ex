@@ -11,6 +11,7 @@ defmodule Hexpm.OAuth.Token do
     field :refresh_token_hash, :string
     field :token_type, :string, default: "bearer"
     field :scopes, {:array, :string}, default: []
+    field :granted_scopes, {:array, :string}, default: []
     field :expires_at, :utc_datetime
     field :refresh_token_expires_at, :utc_datetime
     field :revoked_at, :utc_datetime
@@ -39,6 +40,7 @@ defmodule Hexpm.OAuth.Token do
       :refresh_token_hash,
       :token_type,
       :scopes,
+      :granted_scopes,
       :expires_at,
       :refresh_token_expires_at,
       :revoked_at,
@@ -64,6 +66,10 @@ defmodule Hexpm.OAuth.Token do
     |> unique_constraint(:jti)
     |> unique_constraint(:refresh_jti)
     |> unique_constraint(:refresh_token_hash)
+    |> unique_constraint(:grant_reference,
+      name: :oauth_tokens_device_code_grant_reference_client_id_index,
+      message: "a live token already exists for this device code"
+    )
   end
 
   def build(attrs) do
@@ -72,10 +78,16 @@ defmodule Hexpm.OAuth.Token do
   end
 
   defp validate_scopes(changeset) do
-    validate_change(changeset, :scopes, fn :scopes, scopes ->
+    changeset
+    |> validate_scopes_field(:scopes)
+    |> validate_scopes_field(:granted_scopes)
+  end
+
+  defp validate_scopes_field(changeset, field) do
+    validate_change(changeset, field, fn ^field, scopes ->
       case Permissions.validate_scopes(scopes) do
         :ok -> []
-        {:error, message} -> [scopes: message]
+        {:error, message} -> [{field, message}]
       end
     end)
   end

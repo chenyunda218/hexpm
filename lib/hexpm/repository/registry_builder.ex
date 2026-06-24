@@ -2,7 +2,7 @@ defmodule Hexpm.Repository.RegistryBuilder do
   import Ecto.Query, only: [from: 2]
   require Hexpm.Repo
   require Logger
-  alias Hexpm.Repository.{Package, Release, Repository, Requirement}
+  alias Hexpm.Repository.{Package, Release, Repository, Requirement, Storage}
   alias Hexpm.Repo
 
   def full(repository) do
@@ -93,7 +93,7 @@ defmodule Hexpm.Repository.RegistryBuilder do
 
       Hexpm.Store.delete_many(:repo_bucket, old_keys -- new_keys)
 
-      Hexpm.CDN.purge_key(:fastly_hexrepo, [
+      Storage.purge([
         "registry",
         repository_cdn_key(repository, "registry")
       ])
@@ -109,7 +109,7 @@ defmodule Hexpm.Repository.RegistryBuilder do
       versions = build_versions(repository, packages, release_map)
       upload_files(repository, {names, versions, []})
 
-      Hexpm.CDN.purge_key(:fastly_hexrepo, [
+      Storage.purge([
         "registry-index",
         repository_cdn_key(repository, "registry-index")
       ])
@@ -126,7 +126,7 @@ defmodule Hexpm.Repository.RegistryBuilder do
 
       upload_files(repository, {nil, nil, packages})
 
-      Hexpm.CDN.purge_key(:fastly_hexrepo, [
+      Storage.purge([
         "registry-package-#{package.name}",
         repository_cdn_key(repository, "registry-package", package.name)
       ])
@@ -137,12 +137,9 @@ defmodule Hexpm.Repository.RegistryBuilder do
     log(:package_delete, fn ->
       repository = package.repository
 
-      Hexpm.Store.delete(
-        :repo_bucket,
-        repository_store_key(repository, "packages/#{package.name}")
-      )
+      Storage.delete_object(repository_store_key(repository, "packages/#{package.name}"))
 
-      Hexpm.CDN.purge_key(:fastly_hexrepo, [
+      Storage.purge([
         "registry-package-#{package.name}",
         repository_cdn_key(repository, "registry-package", package.name)
       ])
@@ -174,11 +171,6 @@ defmodule Hexpm.Repository.RegistryBuilder do
     end
   end
 
-  defp sign_protobuf(contents) do
-    private_key = Application.fetch_env!(:hexpm, :private_key)
-    :hex_registry.sign_protobuf(contents, private_key)
-  end
-
   defp build_all(repository, packages, releases) do
     release_map = Map.new(releases)
 
@@ -191,10 +183,10 @@ defmodule Hexpm.Repository.RegistryBuilder do
 
   defp build_names(repository, packages) do
     packages =
-      Enum.map(packages, fn {name, {updated_at, _versions}} ->
+      Enum.map(packages, fn {name, {updated_at, _versions, _advisories}} ->
         # Currently using Package.updated_at, would be more accurate to use
         # a timestamp that is only updated when the registry is updated by:
-        # publish, revert, or retire
+        # publish, revert, retire, or new advisory
         {seconds, nanos} = to_unix_nano(updated_at)
 
         %{
@@ -205,46 +197,64 @@ defmodule Hexpm.Repository.RegistryBuilder do
 
     %{packages: packages, repository: repository.name}
     |> :hex_registry.encode_names()
-    |> sign_protobuf()
-    |> :zlib.gzip()
+    |> Storage.sign_and_gzip()
   end
 
   defp build_versions(repository, packages, release_map) do
     packages =
-      Enum.map(packages, fn {name, {_updated_at, [versions]}} ->
+      Enum.map(packages, fn {name, {_updated_at, [versions], _advisories}} ->
         %{
           name: name,
           versions: versions,
-          retired: build_retired_indexes(name, versions, release_map)
+          retired: build_retired_indexes(name, versions, release_map),
+          with_advisories: build_advisory_indexes(name, versions, release_map)
         }
       end)
 
     %{packages: packages, repository: repository.name}
     |> :hex_registry.encode_versions()
-    |> sign_protobuf()
-    |> :zlib.gzip()
+    |> Storage.sign_and_gzip()
   end
 
   defp build_retired_indexes(name, versions, release_map) do
     versions
     |> Enum.with_index()
     |> Enum.flat_map(fn {version, ix} ->
-      [_deps, _inner_checksum, _outer_checksum, _tools, retirement] = release_map[{name, version}]
+      [_deps, _inner_checksum, _outer_checksum, _tools, retirement, _advisory_ids, _inserted_at] =
+        release_map[{name, version}]
+
       if retirement, do: [ix], else: []
     end)
   end
 
+  defp build_advisory_indexes(name, versions, release_map) do
+    versions
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {version, ix} ->
+      [_deps, _inner_checksum, _outer_checksum, _tools, _retirement, advisory_ids, _inserted_at] =
+        release_map[{name, version}]
+
+      if advisory_ids != [], do: [ix], else: []
+    end)
+  end
+
   defp build_packages(repository, packages, release_map) do
-    Enum.map(packages, fn {name, {_updated_at, [versions]}} ->
-      contents = build_package(repository, name, versions, release_map)
+    Enum.map(packages, fn {name, {_updated_at, [versions], advisories}} ->
+      contents = build_package(repository, name, versions, advisories, release_map)
       {name, contents}
     end)
   end
 
-  defp build_package(repository, name, versions, release_map) do
+  defp build_package(repository, name, versions, package_advisories, release_map) do
+    advisory_index =
+      package_advisories
+      |> Enum.with_index()
+      |> Map.new(fn {a, i} -> {a["id"], i} end)
+
     releases =
       Enum.map(versions, fn version ->
-        [deps, inner_checksum, outer_checksum, _tools, retirement] = release_map[{name, version}]
+        [deps, inner_checksum, outer_checksum, _tools, retirement, advisory_ids, inserted_at] =
+          release_map[{name, version}]
 
         deps =
           Enum.map(deps, fn [repo, dep, req, opt, app] ->
@@ -255,11 +265,15 @@ defmodule Hexpm.Repository.RegistryBuilder do
             map
           end)
 
+        {published_seconds, published_nanos} = to_unix_nano(inserted_at)
+
         release = %{
           version: version,
           inner_checksum: inner_checksum,
           outer_checksum: outer_checksum,
-          dependencies: deps
+          dependencies: deps,
+          advisory_indexes: Enum.map(advisory_ids, &advisory_index[&1]),
+          published_at: %{seconds: published_seconds, nanos: published_nanos}
         }
 
         if retirement do
@@ -277,12 +291,42 @@ defmodule Hexpm.Repository.RegistryBuilder do
     %{
       name: name,
       repository: repository.name,
-      releases: releases
+      releases: releases,
+      advisories: Enum.map(package_advisories, &build_advisory/1)
     }
     |> :hex_registry.encode_package()
-    |> sign_protobuf()
-    |> :zlib.gzip()
+    |> Storage.sign_and_gzip()
   end
+
+  defp build_advisory(%{
+         "id" => id,
+         "summary" => summary,
+         "cvss_rating" => cvss_rating,
+         "cvss_score" => cvss_score,
+         "aliases" => aliases
+       }) do
+    map = %{
+      id: id,
+      summary: summary,
+      html_url: "https://osv.dev/vulnerability/#{URI.encode(id)}",
+      api_url: "https://api.osv.dev/v1/vulns/#{URI.encode(id)}",
+      aliases: aliases
+    }
+
+    map = if cvss_score, do: Map.put(map, :cvss_score, cvss_score), else: map
+
+    if cvss_rating do
+      Map.put(map, :severity, advisory_severity(cvss_rating))
+    else
+      map
+    end
+  end
+
+  defp advisory_severity("none"), do: :SEVERITY_NONE
+  defp advisory_severity("low"), do: :SEVERITY_LOW
+  defp advisory_severity("medium"), do: :SEVERITY_MEDIUM
+  defp advisory_severity("high"), do: :SEVERITY_HIGH
+  defp advisory_severity("critical"), do: :SEVERITY_CRITICAL
 
   defp retirement_reason("other"), do: :RETIRED_OTHER
   defp retirement_reason("invalid"), do: :RETIRED_INVALID
@@ -291,14 +335,10 @@ defmodule Hexpm.Repository.RegistryBuilder do
   defp retirement_reason("renamed"), do: :RETIRED_RENAMED
 
   defp upload_files(repository, objects) do
-    upload_objects(objects(objects, repository))
-  end
-
-  defp upload_objects(objects) do
     Task.async_stream(
-      objects,
-      fn {key, data, opts} ->
-        Hexpm.Store.put(:repo_bucket, key, data, opts)
+      objects(objects, repository),
+      fn {key, data, surrogate_keys} ->
+        Storage.put_object(key, data, surrogate_keys, cache_control(repository))
       end,
       max_concurrency: 10,
       timeout: 60_000
@@ -319,47 +359,25 @@ defmodule Hexpm.Repository.RegistryBuilder do
   end
 
   defp index_objects(names, versions, repository) do
-    surrogate_key =
-      Enum.join(
-        [
-          repository_cdn_key(repository, "registry"),
-          repository_cdn_key(repository, "registry-index")
-        ],
-        " "
-      )
-
-    meta = [
-      {"surrogate-key", surrogate_key},
-      {"surrogate-control", "public, max-age=604800"}
+    surrogate_keys = [
+      repository_cdn_key(repository, "registry"),
+      repository_cdn_key(repository, "registry-index")
     ]
 
-    opts = [cache_control: cache_control(repository), meta: meta]
-    index_opts = Keyword.put(opts, :meta, meta)
-
-    names_object = {repository_store_key(repository, "names"), names, index_opts}
-    versions_object = {repository_store_key(repository, "versions"), versions, index_opts}
-
-    [names_object, versions_object]
+    [
+      {repository_store_key(repository, "names"), names, surrogate_keys},
+      {repository_store_key(repository, "versions"), versions, surrogate_keys}
+    ]
   end
 
   defp package_objects(packages, repository) do
     Enum.map(packages, fn {name, contents} ->
-      surrogate_key =
-        Enum.join(
-          [
-            repository_cdn_key(repository, "registry"),
-            repository_cdn_key(repository, "registry-package", name)
-          ],
-          " "
-        )
-
-      meta = [
-        {"surrogate-key", surrogate_key},
-        {"surrogate-control", "public, max-age=604800"}
+      surrogate_keys = [
+        repository_cdn_key(repository, "registry"),
+        repository_cdn_key(repository, "registry-package", name)
       ]
 
-      opts = [cache_control: cache_control(repository), meta: meta]
-      {repository_store_key(repository, "packages/#{name}"), contents, opts}
+      {repository_store_key(repository, "packages/#{name}"), contents, surrogate_keys}
     end)
   end
 
@@ -369,10 +387,15 @@ defmodule Hexpm.Repository.RegistryBuilder do
   defp package_tuples(packages, releases) do
     Enum.reduce(releases, %{}, fn map, acc ->
       case Map.fetch(packages, map.package_id) do
-        {:ok, {package, updated_at}} ->
-          Map.update(acc, package, {updated_at, [map.version]}, fn {^updated_at, versions} ->
-            {updated_at, [map.version | versions]}
-          end)
+        {:ok, {package, updated_at, advisories}} ->
+          Map.update(
+            acc,
+            package,
+            {updated_at, [map.version], advisories},
+            fn {^updated_at, versions, ^advisories} ->
+              {updated_at, [map.version | versions], advisories}
+            end
+          )
 
         :error ->
           acc
@@ -382,13 +405,13 @@ defmodule Hexpm.Repository.RegistryBuilder do
   end
 
   defp sort_package_tuples(tuples) do
-    Enum.map(tuples, fn {name, {updated_at, versions}} ->
+    Enum.map(tuples, fn {name, {updated_at, versions, advisories}} ->
       versions =
         versions
         |> Enum.sort(&(Version.compare(&1, &2) == :lt))
         |> Enum.map(&to_string/1)
 
-      {name, {updated_at, [versions]}}
+      {name, {updated_at, [versions], advisories}}
     end)
     |> Enum.sort()
   end
@@ -396,10 +419,20 @@ defmodule Hexpm.Repository.RegistryBuilder do
   defp release_tuples(packages, releases, requirements) do
     Enum.flat_map(releases, fn map ->
       case Map.fetch(packages, map.package_id) do
-        {:ok, {package, _updated_at}} ->
+        {:ok, {package, _updated_at, _advisories}} ->
           key = {package, to_string(map.version)}
           deps = deps_list(requirements[map.release_id] || [])
-          value = [deps, map.inner_checksum, map.outer_checksum, map.build_tools, map.retirement]
+
+          value = [
+            deps,
+            map.inner_checksum,
+            map.outer_checksum,
+            map.build_tools,
+            map.retirement,
+            map.advisory_ids,
+            map.inserted_at
+          ]
+
           [{key, value}]
 
         :error ->
@@ -415,24 +448,45 @@ defmodule Hexpm.Repository.RegistryBuilder do
     |> Enum.sort()
   end
 
-  defp packages(repository, nil) do
-    from(
-      p in Package,
-      where: p.repository_id == ^repository.id,
-      select: {p.id, {p.name, p.updated_at}}
-    )
+  defp packages(repository, package) do
+    query =
+      from(p in Package,
+        left_join: a in assoc(p, :security_advisories),
+        on: is_nil(a.withdrawn_at),
+        group_by: p.id,
+        select:
+          {p.id,
+           {p.name, p.updated_at,
+            fragment(
+              "coalesce(json_agg(json_build_object('id', ?, 'summary', ?, 'cvss_rating', ?, 'cvss_score', ?, 'aliases', ?) ORDER BY ?) FILTER (WHERE ? IS NOT NULL), '[]')",
+              a.id,
+              a.summary,
+              a.cvss_rating,
+              a.cvss_score,
+              a.aliases,
+              a.id,
+              a.id
+            )}}
+      )
+
+    query =
+      case package do
+        nil -> from(p in query, where: p.repository_id == ^repository.id)
+        _ -> from(p in query, where: p.id == ^package.id)
+      end
+
+    query
     |> Repo.all()
     |> Map.new()
-  end
-
-  defp packages(_repository, package) do
-    %{package.id => {package.name, package.updated_at}}
   end
 
   defp releases(repository, package) do
     from(
       r in Release,
       join: p in assoc(r, :package),
+      left_join: a in assoc(r, :security_advisories),
+      on: is_nil(a.withdrawn_at),
+      group_by: r.id,
       select: %{
         release_id: r.id,
         version: r.version,
@@ -440,7 +494,9 @@ defmodule Hexpm.Repository.RegistryBuilder do
         inner_checksum: r.inner_checksum,
         outer_checksum: r.outer_checksum,
         build_tools: fragment("?->'build_tools'", r.meta),
-        retirement: r.retirement
+        retirement: r.retirement,
+        inserted_at: r.inserted_at,
+        advisory_ids: fragment("array_remove(array_agg(?), NULL)", a.id)
       }
     )
     |> releases_where(repository, package)

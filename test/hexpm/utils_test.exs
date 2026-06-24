@@ -65,4 +65,73 @@ defmodule Hexpm.UtilsTest do
       refute Utils.within_last_day?(timestamp)
     end
   end
+
+  describe "current_docs_html_url/3" do
+    setup do
+      hexpm = %Hexpm.Repository.Repository{id: 1, name: "hexpm"}
+      package = %Hexpm.Repository.Package{name: "decimal", repository: hexpm}
+      current = %Hexpm.Repository.Release{version: Version.parse!("1.2.3")}
+      older = %Hexpm.Repository.Release{version: Version.parse!("1.0.0")}
+      %{package: package, current: current, older: older}
+    end
+
+    test "returns nil when no release has docs", %{package: package, current: current} do
+      assert is_nil(Utils.current_docs_html_url(package, current, nil))
+    end
+
+    test "returns nil with no current release and no docs", %{package: package} do
+      assert is_nil(Utils.current_docs_html_url(package, nil, nil))
+    end
+
+    test "returns the version-specific URL when current matches latest-with-docs", %{
+      package: package,
+      current: current
+    } do
+      url = Utils.current_docs_html_url(package, current, current)
+      assert url =~ "//decimal."
+      assert url =~ "1.2.3"
+    end
+
+    test "returns the un-versioned URL when current differs from latest-with-docs", %{
+      package: package,
+      current: current,
+      older: older
+    } do
+      url = Utils.current_docs_html_url(package, current, older)
+      assert url =~ "//decimal."
+      refute url =~ "1.2.3"
+      refute url =~ "1.0.0"
+    end
+
+    test "returns the un-versioned URL when current_release is nil but latest has docs", %{
+      package: package,
+      older: older
+    } do
+      url = Utils.current_docs_html_url(package, nil, older)
+      assert url =~ "//decimal."
+      refute url =~ "1.0.0"
+    end
+
+    test "maps underscores in the package name to hyphens in the subdomain" do
+      hexpm = %Hexpm.Repository.Repository{id: 1, name: "hexpm"}
+      package = %Hexpm.Repository.Package{name: "phoenix_live_view", repository: hexpm}
+      release = %Hexpm.Repository.Release{version: Version.parse!("1.0.0")}
+
+      url = Utils.docs_html_url(hexpm, package, release)
+
+      assert url =~ "//phoenix-live-view."
+      refute url =~ "phoenix_live_view"
+    end
+
+    test "maps underscores in the org repository name to hyphens in the subdomain" do
+      repository = %Hexpm.Repository.Repository{id: 2, name: "my_org"}
+      package = %Hexpm.Repository.Package{name: "secret", repository: repository}
+      release = %Hexpm.Repository.Release{version: Version.parse!("1.0.0")}
+
+      url = Utils.docs_html_url(repository, package, release)
+
+      assert url =~ "//my-org."
+      refute url =~ "my_org"
+    end
+  end
 end

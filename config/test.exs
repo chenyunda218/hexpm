@@ -3,6 +3,7 @@ import Config
 config :hexpm,
   repo_bucket: {Hexpm.Store.Memory, "repo_bucket"},
   logs_bucket: {Hexpm.Store.Memory, "logs_bucket"},
+  docs_bucket: {Hexpm.Store.Memory, "docs_bucket"},
   secret: "796f75666f756e64746865686578",
   jwt_signing_key: """
   -----BEGIN EC PRIVATE KEY-----
@@ -39,7 +40,8 @@ config :hexpm, HexpmWeb.Endpoint,
   secret_key_base: "38K8orQfRHMC6ZWXIdgItQEiumeY+L2Ls0fvYfTMt4AoG5+DSFsLG6vMajNcd5Td",
   live_view: [signing_salt: "2UTSB72sZsF9KTlxefkIrFFPXTO7d+Ep"]
 
-config :hexpm, Hexpm.Emails.Mailer, adapter: Bamboo.TestAdapter
+config :hexpm, Hexpm.Emails.Mailer, adapter: Swoosh.Adapters.Test
+config :swoosh, :api_client, false
 
 config :hexpm, Hexpm.RepoBase,
   username: "postgres",
@@ -55,3 +57,6 @@ config :logger, level: :error
 config :hexpm, :hcaptcha,
   sitekey: "sitekey",
   secret: "secret"
+
+# Don't sleep waiting for Sentry to flush in tests.
+config :hexpm, sentry_flush_ms: 0

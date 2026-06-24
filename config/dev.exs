@@ -2,7 +2,9 @@ import Config
 
 config :hexpm,
   billing_report: false,
+  sudo: false,
   sudo_timeout: Duration.new!(minute: 60),
+  sudo_force_timeout: Duration.new!(second: 30),
   secret: "796f75666f756e64746865686578",
   jwt_signing_key: """
   -----BEGIN EC PRIVATE KEY-----
@@ -67,7 +69,7 @@ config :hexpm, Hexpm.RepoBase,
   hostname: "localhost",
   pool_size: 5
 
-config :hexpm, Hexpm.Emails.Mailer, adapter: Bamboo.LocalAdapter
+config :hexpm, Hexpm.Emails.Mailer, adapter: Swoosh.Adapters.Local
 
 config :ueberauth, Ueberauth.Strategy.Github.OAuth,
   client_id: System.get_env("HEXPM_GITHUB_CLIENT_ID"),

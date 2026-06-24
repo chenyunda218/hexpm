@@ -8,17 +8,22 @@ config :hexpm,
   support_email: "support@hex.pm",
   repo_bucket: {Hexpm.Store.Local, "repo_bucket"},
   logs_bucket: {Hexpm.Store.Local, "logs_bucket"},
+  docs_bucket: {Hexpm.Store.Local, "docs_bucket"},
   cdn_impl: Hexpm.CDN.Local,
   billing_impl: Hexpm.Billing.Local,
   pwned_impl: Hexpm.Pwned.Local,
-  sudo_timeout: Duration.new!(hour: 1)
+  sudo_timeout: Duration.new!(hour: 1),
+  sudo_force_timeout: Duration.new!(second: 30)
 
 config :hexpm, :features, package_reports: true
 
 config :hexpm, ecto_repos: [Hexpm.RepoBase]
 
 config :ex_aws,
-  json_codec: Jason
+  json_codec: Jason,
+  http_client: ExAws.Request.Req
+
+config :sentry, client: Hexpm.SentryClient
 
 config :bcrypt_elixir, log_rounds: 4
 
@@ -38,11 +43,10 @@ config :hexpm, Hexpm.RepoBase,
   priv: "priv/repo",
   migration_timestamps: [type: :utc_datetime_usec]
 
-config :hexpm, Hexpm.Emails.Mailer,
-  adapter: Bamboo.SendGridAdapter,
-  hackney_opts: [
-    recv_timeout: :timer.minutes(1)
-  ]
+config :swoosh, :api_client, Swoosh.ApiClient.Finch
+config :swoosh, :finch_name, Hexpm.Finch
+
+config :hexpm, Hexpm.Emails.Mailer, adapter: Swoosh.Adapters.Sendgrid
 
 config :phoenix, :template_engines, md: HexpmWeb.MarkdownEngine
 
@@ -94,5 +98,7 @@ config :ueberauth, Ueberauth,
   providers: [
     github: {Ueberauth.Strategy.Github, [default_scope: "user:email"]}
   ]
+
+config :mdex_native, syntax_highlighter: :lumis
 
 import_config "#{Mix.env()}.exs"

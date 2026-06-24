@@ -108,20 +108,13 @@ defmodule Hexpm.Utils do
   def parse_search(search) when is_binary(search), do: String.trim(search)
   def parse_search(_), do: nil
 
-  defp diff(a, b) do
-    {days, time} = :calendar.time_difference(a, b)
-    days * 24 * 60 * 60 + :calendar.time_to_seconds(time)
-  end
-
   @doc """
   Determine if a given timestamp is less than a day (86400 seconds) old
   """
   def within_last_day?(nil), do: false
 
   def within_last_day?(a) do
-    diff = diff(NaiveDateTime.to_erl(a), :calendar.universal_time())
-
-    diff < 24 * 60 * 60
+    NaiveDateTime.diff(NaiveDateTime.utc_now(), a, :second) < 24 * 60 * 60
   end
 
   def binarify(term, opts \\ [])
@@ -166,18 +159,64 @@ defmodule Hexpm.Utils do
   """
   @spec docs_html_url(Repository.t(), Package.t(), Release.t() | nil) :: String.t()
   def docs_html_url(%Repository{id: 1}, package, release) do
-    docs_url = Application.get_env(:hexpm, :docs_url)
+    docs_url = URI.parse(Application.get_env(:hexpm, :docs_url))
+    docs_url = %{docs_url | host: "#{name_to_subdomain(package.name)}.#{docs_url.host}"}
+    version = release && "#{release.version}/"
+    "#{docs_url}/#{version}"
+  end
+
+  def docs_html_url(%Repository{} = repository, package, release) do
+    docs_url = URI.parse(Application.get_env(:hexpm, :private_docs_url))
+    docs_url = %{docs_url | host: "#{name_to_subdomain(repository.name)}.#{docs_url.host}"}
     package = package.name
     version = release && "#{release.version}/"
     "#{docs_url}/#{package}/#{version}"
   end
 
-  def docs_html_url(%Repository{} = repository, package, release) do
-    docs_url = URI.parse(Application.get_env(:hexpm, :private_docs_url))
-    docs_url = %{docs_url | host: "#{repository.name}.#{docs_url.host}"}
-    package = package.name
-    version = release && "#{release.version}/"
-    "#{docs_url}/#{package}/#{version}"
+  @doc """
+  Apex-form docs URL for a hexpm-repo package: `<docs_url>/<package>/`.
+
+  Used by `docs_sitemap.xml`, which lists per-package sitemap index
+  entries. Sitemap consumers (Googlebot) require all listed URLs to
+  share a common host with the sitemap file, so even after package
+  docs move to `<package>.hexdocs.pm`, the index keeps emitting
+  `hexdocs.pm/<package>/...` and lets the apex 301 deliver the
+  canonical URL to the crawler.
+  """
+  @spec docs_html_apex_url(String.t()) :: String.t()
+  def docs_html_apex_url(package_name) do
+    Application.get_env(:hexpm, :docs_url) <> "/" <> package_name <> "/"
+  end
+
+  # Hex package and organization names allow underscores (packages
+  # `^[a-z][a-z0-9_]*$`, orgs `^[a-z0-9_]+$`), but RFC 1123 hostname labels
+  # and RFC 6125 wildcard SAN matching don't, and Fastly enforces strict SAN
+  # matching at the HTTP edge. Map `_` -> `-` for the subdomain. For public
+  # hexdocs.pm packages the Fastly Compute subdomain handler reverses the
+  # mapping before building the GCS bucket key; for hexorgs.pm orgs the
+  # hexdocs app reverses it.
+  defp name_to_subdomain(name), do: String.replace(name, "_", "-")
+
+  @doc """
+  Sidebar docs URL for a package given the currently-displayed release and the
+  latest release that has docs.
+
+  - If the current release has docs published, returns the version-specific URL.
+  - If only an older release has docs, returns the latest-with-docs URL with
+    no version segment.
+  - If no release has docs, returns `nil`.
+  """
+  @spec current_docs_html_url(Package.t(), Release.t() | nil, Release.t() | nil) ::
+          String.t() | nil
+  def current_docs_html_url(_package, _current_release, nil), do: nil
+
+  def current_docs_html_url(package, current_release, latest_release_with_docs) do
+    release =
+      if current_release && current_release.version == latest_release_with_docs.version do
+        current_release
+      end
+
+    docs_html_url(package.repository, package, release)
   end
 
   @doc """

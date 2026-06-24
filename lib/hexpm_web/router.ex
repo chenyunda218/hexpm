@@ -93,7 +93,7 @@ defmodule HexpmWeb.Router do
   end
 
   if Mix.env() == :dev do
-    forward "/sent_emails", Bamboo.SentEmailViewerPlug
+    forward "/dev/mailbox", Plug.Swoosh.MailboxPreview
   end
 
   scope "/", HexpmWeb, host: "readme." do
@@ -170,6 +170,7 @@ defmodule HexpmWeb.Router do
     get "/docs/rebar3-private", DocsController, :rebar3_private
     get "/docs/rebar3-tasks", DocsController, :rebar3_tasks
     get "/docs/private", DocsController, :private
+    get "/docs/dependency-policies", DocsController, :dependency_policies
     get "/docs/faq", DocsController, :faq
     get "/docs/mirrors", DocsController, :mirrors
     get "/docs/public-keys", DocsController, :public_keys
@@ -181,7 +182,14 @@ defmodule HexpmWeb.Router do
     get "/policies/copyright", PolicyController, :copyright
     get "/policies/dispute", PolicyController, :dispute
 
-    get "/packages", PackageController, :index
+    live_session :packages, on_mount: {HexpmWeb.Live.InitAssigns, :default} do
+      live "/packages", PackageLive.Index, :index
+    end
+
+    get "/packages/:name/owners", PackageOwnerController, :index
+    post "/packages/:name/owners", PackageOwnerController, :create
+    put "/packages/:name/owners/:username", PackageOwnerController, :update
+    delete "/packages/:name/owners/:username", PackageOwnerController, :delete
     get "/packages/:name", PackageController, :show
     get "/packages/:name/audit-logs", PackageController, :audit_logs
     get "/packages/:name/dependents", PackageController, :dependents
@@ -190,6 +198,10 @@ defmodule HexpmWeb.Router do
     get "/packages/:name/advisories", PackageController, :advisories
     get "/packages/:name/:version/dependencies", PackageController, :dependencies
     get "/packages/:name/:version", PackageController, :show
+    get "/packages/:repository/:name/owners", PackageOwnerController, :index
+    post "/packages/:repository/:name/owners", PackageOwnerController, :create
+    put "/packages/:repository/:name/owners/:username", PackageOwnerController, :update
+    delete "/packages/:repository/:name/owners/:username", PackageOwnerController, :delete
     get "/packages/:repository/:name/audit-logs", PackageController, :audit_logs
     get "/packages/:repository/:name/dependents", PackageController, :dependents
     get "/packages/:repository/:name/versions", PackageController, :versions
@@ -283,6 +295,22 @@ defmodule HexpmWeb.Router do
     post "/orgs/:dashboard_org/invoices/:id/pay", OrganizationController, :pay_invoice
     post "/orgs/:dashboard_org/profile", OrganizationController, :update_profile
 
+    get "/orgs/:dashboard_org/policies", OrganizationController, :policies
+    get "/orgs/:dashboard_org/policies/new", OrganizationController, :new_policy
+
+    get "/orgs/:dashboard_org/policies/package-suggestions",
+        OrganizationController,
+        :policy_package_suggestions
+
+    get "/orgs/:dashboard_org/policies/version-suggestions",
+        OrganizationController,
+        :policy_version_suggestions
+
+    post "/orgs/:dashboard_org/policies", OrganizationController, :create_policy
+    get "/orgs/:dashboard_org/policies/:name", OrganizationController, :edit_policy
+    post "/orgs/:dashboard_org/policies/:name", OrganizationController, :update_policy
+    delete "/orgs/:dashboard_org/policies/:name", OrganizationController, :delete_policy
+
     get "/keys", KeyController, :index
     delete "/keys", KeyController, :delete
     post "/keys", KeyController, :create
@@ -291,6 +319,11 @@ defmodule HexpmWeb.Router do
     delete "/sessions", SessionController, :delete
 
     get "/audit-logs", AuditLogController, :index
+
+    get "/delete-account", DeleteAccountController, :show
+    post "/delete-account", DeleteAccountController, :create
+    get "/delete-account/confirm", DeleteAccountController, :confirm
+    post "/delete-account/confirm", DeleteAccountController, :confirm_delete
   end
 
   scope "/dashboard", HexpmWeb.Dashboard do
@@ -400,6 +433,8 @@ defmodule HexpmWeb.Router do
           get "/tarballs/:ball", TestController, :tarball
         end
       end
+
+      get "/repos/:repository/policies/:name", TestController, :policy
     end
 
     scope "/preview", HexpmWeb do

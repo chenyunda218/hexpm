@@ -57,6 +57,22 @@
               </li>
               <li>
                 <a
+                  href={~p"/docs/dependency-policies"}
+                  class={[
+                    "block px-3 py-1.5 text-sm rounded transition-colors",
+                    if(@view_name == :dependency_policies,
+                      do:
+                        "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-200 font-medium",
+                      else:
+                        "text-grey-700 dark:text-grey-200 hover:bg-grey-50 dark:hover:bg-grey-800"
+                    )
+                  ]}
+                >
+                  Dependency policies
+                </a>
+              </li>
+              <li>
+                <a
                   target="_blank"
                   rel="noopener"
                   href="https://hexdocs.pm/hex"
@@ -311,22 +327,13 @@
             color: var(--color-grey-800);
           }
           .docs-content pre {
-            background-color: var(--color-grey-900);
-            padding: 1rem;
-            border-radius: 0.5rem;
             overflow-x: auto;
             margin-bottom: 1rem;
           }
           .docs-content pre code {
-            background-color: transparent;
             padding: 0;
-            font-size: 0.875rem;
-            color: var(--color-grey-100);
-          }
-          /* Override highlight.js background to use our dark background */
-          .docs-content pre .hljs {
             background: transparent;
-            color: var(--color-grey-100);
+            font-size: 0.875rem;
           }
           html[data-theme="dark"] .docs-content h2,
           html[data-theme="dark"] .docs-content h3,

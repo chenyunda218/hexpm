@@ -1,6 +1,5 @@
 defmodule HexpmWeb.DashboardControllerTest do
   use HexpmWeb.ConnCase, async: true
-  use Bamboo.Test
 
   setup do
     %{

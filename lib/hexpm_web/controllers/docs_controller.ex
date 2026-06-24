@@ -28,7 +28,7 @@ defmodule HexpmWeb.DocsController do
   end
 
   def tasks(conn, _params) do
-    redirect(conn, external: "https://hexdocs.pm/hex")
+    redirect(conn, external: "https://hex.hexdocs.pm")
   end
 
   def gleam_usage(conn, _params) do
@@ -87,6 +87,17 @@ defmodule HexpmWeb.DocsController do
       view: "private.html",
       view_name: :private,
       title: "Private packages",
+      container: "flex-1 flex flex-col"
+    )
+  end
+
+  def dependency_policies(conn, _params) do
+    render(
+      conn,
+      "layout.html",
+      view: "dependency_policies.html",
+      view_name: :dependency_policies,
+      title: "Dependency policies and cooldowns",
       container: "flex-1 flex flex-col"
     )
   end

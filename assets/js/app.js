@@ -15,6 +15,13 @@ import { NavigateOnChange } from "./hooks/navigate_on_change";
 import { ConfirmSubmit } from "./hooks/confirm_submit";
 import { initializeTheme, syncReadmeFrameTheme, resolveTheme } from "./theme";
 import { SearchShortcut } from "./hooks/search_shortcut";
+import { SearchInputSync } from "./hooks/search_input_sync";
+import { ToggleGroup } from "./hooks/toggle_group";
+import { RuleToggle } from "./hooks/rule_toggle";
+import { ScrollActiveIntoView } from "./hooks/scroll_active_into_view";
+import { OverrideList } from "./hooks/override_list";
+import { PrivateRepoTabs } from "./hooks/private_repo_tabs";
+import { PolicyDirtyState } from "./hooks/policy_dirty_state";
 
 let csrfToken = document
   .querySelector("meta[name='csrf-token']")
@@ -33,6 +40,13 @@ let Hooks = {
   NavigateOnChange,
   ConfirmSubmit,
   SearchShortcut,
+  SearchInputSync,
+  ToggleGroup,
+  RuleToggle,
+  ScrollActiveIntoView,
+  OverrideList,
+  PrivateRepoTabs,
+  PolicyDirtyState,
 };
 let liveSocket = new LiveSocket("/live", Socket, {
   params: { _csrf_token: csrfToken },
@@ -119,6 +133,7 @@ window.liveSocket = liveSocket;
 
 // README iframe: show spinner until loaded, fall back to description if no readme
 var readmeFrame = document.getElementById("readme-frame");
+var pendingInitialHash = window.location.hash ? window.location.hash.slice(1) : null;
 
 window.addEventListener("message", function (event) {
   if (!event.data || !readmeFrame) return;
@@ -134,6 +149,14 @@ window.addEventListener("message", function (event) {
     syncReadmeFrameTheme(resolveTheme());
     var loading = document.getElementById("readme-loading");
     if (loading) loading.remove();
+
+    if (pendingInitialHash !== null && readmeFrame.contentWindow) {
+      readmeFrame.contentWindow.postMessage(
+        { type: "scroll-to-anchor", id: pendingInitialHash },
+        "*",
+      );
+      pendingInitialHash = null;
+    }
   }
 
   if (event.data.type === "readme-not-found") {
@@ -142,5 +165,19 @@ window.addEventListener("message", function (event) {
     readmeFrame.remove();
     var fallback = document.getElementById("readme-fallback");
     if (fallback) fallback.classList.remove("hidden");
+  }
+
+  if (
+    event.data.type === "readme-anchor" &&
+    typeof event.data.id === "string" &&
+    typeof event.data.top === "number"
+  ) {
+    var frameTop = readmeFrame.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: frameTop + event.data.top, behavior: "smooth" });
+    if (event.data.id) {
+      history.replaceState(null, "", "#" + event.data.id);
+    } else {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
   }
 });

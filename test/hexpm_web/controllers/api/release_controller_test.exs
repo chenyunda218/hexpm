@@ -272,6 +272,64 @@ defmodule HexpmWeb.API.ReleaseControllerTest do
       assert Hexpm.Repo.get_by(Package, name: package.name).meta.description == "awesomeness"
     end
 
+    test "rejects release with escaping symlink", %{user: user} do
+      meta = %{name: Fake.sequence(:package), version: "1.0.0", description: "description"}
+
+      conn =
+        build_conn()
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put_req_header("authorization", key_for(user))
+        |> post("/api/publish", create_tar_with_symlink(meta, "README.md", "../../README.md"))
+
+      result = json_response(conn, 422)
+      assert result["errors"]["tar"] =~ "unsafe_symlink"
+      refute Hexpm.Repo.get_by(Package, name: meta.name)
+    end
+
+    test "rejects release with escaping path", %{user: user} do
+      meta = %{name: Fake.sequence(:package), version: "1.0.0", description: "description"}
+      tarball = create_tar(meta, [{"../outside", "outside"}])
+
+      assert_unsafe_path(tarball)
+
+      conn =
+        build_conn()
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put_req_header("authorization", key_for(user))
+        |> post("/api/publish", tarball)
+
+      result = json_response(conn, 422)
+      assert result["errors"]["tar"] =~ "The path points above the current working directory"
+      refute Hexpm.Repo.get_by(Package, name: meta.name)
+    end
+
+    test "authenticates before extracting release contents" do
+      meta = %{name: Fake.sequence(:package), version: "1.0.0", description: "description"}
+
+      conn =
+        build_conn()
+        |> put_req_header("content-type", "application/octet-stream")
+        |> post("/api/publish", create_tar(meta, [{"../outside", "outside"}]))
+
+      result = json_response(conn, 401)
+      assert result["message"] == "missing authentication information"
+      refute Hexpm.Repo.get_by(Package, name: meta.name)
+    end
+
+    test "accepts release with internal symlink", %{user: user} do
+      meta = %{name: Fake.sequence(:package), version: "1.0.0", description: "description"}
+
+      conn =
+        build_conn()
+        |> put_req_header("content-type", "application/octet-stream")
+        |> put_req_header("authorization", key_for(user))
+        |> post("/api/publish", create_tar_with_symlink(meta, "dir/link", "../README.md"))
+
+      result = json_response(conn, 201)
+      assert result["version"] == "1.0.0"
+      assert Hexpm.Repo.get_by(Package, name: meta.name)
+    end
+
     test "create new package authorizes with package key permission", %{
       user: user,
       package: package,
@@ -1326,7 +1384,7 @@ defmodule HexpmWeb.API.ReleaseControllerTest do
                "http://localhost:5000/packages/#{package.name}/#{release.version}"
 
       assert result["docs_html_url"] ==
-               "http://localhost:5002/#{package.name}/#{release.version}/"
+               "http://#{String.replace(package.name, "_", "-")}.localhost:5002/#{release.version}/"
 
       assert result["version"] == "#{release.version}"
 
@@ -1442,7 +1500,7 @@ defmodule HexpmWeb.API.ReleaseControllerTest do
                "http://localhost:5000/packages/#{repository.name}/#{package.name}/0.0.1"
 
       assert result["docs_html_url"] ==
-               "http://#{repository.name}.localhost:5002/#{package.name}/0.0.1/"
+               "http://#{String.replace(repository.name, "_", "-")}.localhost:5002/#{package.name}/0.0.1/"
 
       assert result["version"] == "0.0.1"
     end
@@ -1541,6 +1599,29 @@ defmodule HexpmWeb.API.ReleaseControllerTest do
                ["2000-02-01", 3],
                ["2000-02-07", 2]
              ]
+    end
+
+    test "get release downloads (all) limited to range", %{package: package, release: release} do
+      result =
+        build_conn()
+        |> get(
+          "/api/packages/#{package.name}/releases/#{release.version}?downloads_after=2000-02-01"
+        )
+        |> json_response(200)
+
+      assert result["version"] == "#{release.version}"
+      assert result["downloads"] == 9
+
+      result =
+        build_conn()
+        |> get(
+          "/api/packages/#{package.name}/releases/#{release.version}?" <>
+            "downloads=all&downloads_after=2000-02-01&downloads_before=2000-02-07"
+        )
+        |> json_response(200)
+
+      assert result["version"] == "#{release.version}"
+      assert result["downloads"] == 5
     end
   end
 
@@ -1748,6 +1829,30 @@ defmodule HexpmWeb.API.ReleaseControllerTest do
 
       result = json_response(conn, 403)
       assert result["message"] == "Two-factor authentication must be enabled for API write access"
+    end
+  end
+
+  defp create_tar_with_symlink(meta, archive_name, target) do
+    tmp_dir = Hexpm.TmpDir.tmp_dir("release-controller-test")
+    link_path = Path.join(tmp_dir, "link")
+
+    try do
+      File.ln_s!(target, link_path)
+      files = if archive_name == "README.md", do: [], else: [{"README.md", "README"}]
+      create_tar(meta, files ++ [{archive_name, String.to_charlist(link_path)}])
+    after
+      Hexpm.TmpDir.cleanup()
+    end
+  end
+
+  defp assert_unsafe_path(tarball) do
+    tmp_dir = Hexpm.TmpDir.tmp_dir("release-controller-test")
+
+    try do
+      assert {:error, {:inner_tarball, {~c"../outside", :unsafe_path}}} =
+               :hex_tarball.unpack(tarball, String.to_charlist(tmp_dir))
+    after
+      Hexpm.TmpDir.cleanup()
     end
   end
 end

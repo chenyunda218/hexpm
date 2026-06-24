@@ -1,6 +1,6 @@
 defmodule HexpmWeb.Dashboard.OrganizationControllerTest do
   use HexpmWeb.ConnCase, async: true
-  use Bamboo.Test
+  import Swoosh.TestAssertions
 
   alias Hexpm.Accounts.{Organizations, Users, AuditLogs}
 
@@ -18,6 +18,17 @@ defmodule HexpmWeb.Dashboard.OrganizationControllerTest do
         "invoices" => []
       }
     end)
+  end
+
+  defp active_org_tab(html) do
+    {:ok, document} = Floki.parse_document(html)
+
+    [active_tab] = Floki.find(document, ~s(#org-tab-nav [data-active="true"]))
+
+    active_tab
+    |> Floki.text(sep: " ")
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
   end
 
   setup do
@@ -299,7 +310,7 @@ defmodule HexpmWeb.Dashboard.OrganizationControllerTest do
 
       assert repo_user.role == "write"
 
-      assert_delivered_email(Hexpm.Emails.organization_invite(organization, new_user))
+      assert_email_sent(Hexpm.Emails.organization_invite(organization, new_user))
     end
 
     test "adding member does not send invite when user opts out", %{
@@ -337,7 +348,7 @@ defmodule HexpmWeb.Dashboard.OrganizationControllerTest do
 
       assert Repo.get_by(assoc(organization, :organization_users), user_id: new_user.id)
 
-      refute_delivered_email(Hexpm.Emails.organization_invite(organization, new_user))
+      assert_no_email_sent()
     end
 
     test "add member to organization without enough seats", %{
@@ -375,10 +386,12 @@ defmodule HexpmWeb.Dashboard.OrganizationControllerTest do
           "organization_user" => params
         })
 
-      response(conn, 400)
+      html = html_response(conn, 400)
 
       assert Phoenix.Flash.get(conn.assigns.flash, :error) ==
                "Not enough seats in organization to add member."
+
+      assert active_org_tab(html) == "Members"
     end
 
     test "remove member from organization", %{user: user, organization: organization} do
